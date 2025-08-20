@@ -1,5 +1,4 @@
 import express from "express";
-import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -25,7 +24,7 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// Login
+// Login (sem bcrypt)
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
@@ -38,14 +37,17 @@ app.post("/login", async (req, res) => {
   if (error || !user)
     return res.status(400).json({ error: "Usuário não encontrado" });
 
-  const validPassword = await bcrypt.compare(password, user.password);
-  if (!validPassword) return res.status(401).json({ error: "Senha incorreta" });
+  // Comparação direta da senha
+  if (password !== user.password) {
+    return res.status(401).json({ error: "Senha incorreta" });
+  }
 
   const token = jwt.sign(
     { id: user.id, role: user.role },
     process.env.JWT_SECRET,
     { expiresIn: "8h" }
   );
+
   res.json({ token, role: user.role });
 });
 
@@ -72,7 +74,7 @@ app.post("/os", authenticateToken, async (req, res) => {
 // Atualizar progresso da OS (por setor)
 app.post("/os/:id/progresso", authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { status, quantidade_correta, quantidade_defeito } = req.body; // status: 'concluido'
+  const { status, quantidade_correta, quantidade_defeito } = req.body;
 
   // Busca a OS
   const { data: os, error } = await supabase
