@@ -56,15 +56,31 @@ app.post("/os", authenticateToken, async (req, res) => {
   if (req.user.role !== "PCP")
     return res.status(403).json({ error: "Acesso negado" });
 
-  const { numero_os, peca, quantidade, roteiro } = req.body;
+  const {
+    OS_Number,
+    partName,
+    partNumber,
+    quantity,
+    note,
+    createdAt,
+    status,
+    currentSector,
+    routing,
+  } = req.body;
 
-  // Inicializa o progresso como "pendente" para cada etapa
-  const progresso = {};
-  roteiro.forEach((step) => (progresso[step] = "pendente"));
-
-  const { error } = await supabase
-    .from("ordens_servico")
-    .insert([{ numero_os, peca, quantidade, roteiro, progresso }]);
+  const { error } = await supabase.from("Ordens_Servico").insert([
+    {
+      OS_Number,
+      partName,
+      partNumber,
+      quantity,
+      note,
+      createdAt,
+      status,
+      currentSector,
+      routing,
+    },
+  ]);
 
   if (error) return res.status(500).json({ error: error.message });
 
@@ -76,40 +92,29 @@ app.post("/os/:id/progresso", authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { status, quantidade_correta, quantidade_defeito } = req.body;
 
-  // Busca a OS
   const { data: os, error } = await supabase
-    .from("ordens_servico")
+    .from("Ordens_Servico")
     .select("*")
     .eq("id", id)
     .single();
 
   if (error || !os) return res.status(404).json({ error: "OS não encontrada" });
 
-  // Verifica se o usuário tem permissão para atualizar esta etapa
-  const etapaAtual = req.user.role;
-  if (!os.roteiro.includes(etapaAtual))
-    return res
-      .status(403)
-      .json({ error: "Usuário não autorizado nesta etapa" });
+  // Atualiza setor atual e status
+  const atualizacoes = {
+    status,
+    currentSector: req.user.role, // setor atual é o usuário que está atualizando
+  };
 
-  // Atualiza o progresso
-  const novoProgresso = { ...os.progresso };
-  novoProgresso[etapaAtual] = status;
-
-  // Se for Almoxarifado, atualiza quantidade
-  const atualizacoes = { progresso: novoProgresso };
-  if (etapaAtual === "Almoxarifado") {
+  if (req.user.role === "Almoxarifado") {
     atualizacoes.quantidade_correta = quantidade_correta;
     atualizacoes.quantidade_defeito = quantidade_defeito;
     atualizacoes.status = "Aguardando verificação PCP";
   }
 
-  await supabase.from("ordens_servico").update(atualizacoes).eq("id", id);
+  await supabase.from("Ordens_Servico").update(atualizacoes).eq("id", id);
 
-  res.json({
-    message: "Progresso atualizado com sucesso",
-    progresso: novoProgresso,
-  });
+  res.json({ message: "Progresso atualizado com sucesso" });
 });
 
 // PCP finaliza OS
@@ -120,7 +125,7 @@ app.post("/os/:id/finalizar", authenticateToken, async (req, res) => {
   const { id } = req.params;
 
   await supabase
-    .from("ordens_servico")
+    .from("Ordens_Servico")
     .update({ status: "Finalizado" })
     .eq("id", id);
 
