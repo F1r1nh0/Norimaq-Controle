@@ -132,4 +132,38 @@ app.post("/os/:id/finalizar", authenticateToken, async (req, res) => {
   res.json({ message: "OS finalizada com sucesso" });
 });
 
+// Listar todas as OS (somente PCP)
+app.get("/os", authenticateToken, async (req, res) => {
+  if (req.user.role !== "PCP") {
+    return res.status(403).json({ error: "Acesso negado" });
+  }
+
+  const { data, error } = await supabase
+    .from("Ordens_Servico")
+    .select("*");
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json(data);
+});
+
+// Listar OS do setor correspondente ao usuário logado
+app.get("/os/setor", authenticateToken, async (req, res) => {
+  const setor = req.user.role; // setor é baseado no "role" do usuário
+
+  const { data, error } = await supabase
+    .from("Ordens_Servico")
+    .select("*");
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  // Filtra as OS que possuem o setor no roteiro ou no setor atual
+  const filtradas = data.filter(
+    (os) =>
+      os.roteiro.includes(setor) || os.currentSector?.sector === setor
+  );
+
+  res.json(filtradas);
+});
+
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
