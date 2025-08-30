@@ -190,13 +190,7 @@ app.get("/os", authenticateToken, async (req, res) => {
     return res.status(403).json({ error: "Acesso negado" });
   }
 
-<<<<<<< HEAD
-  const { data, error } = await supabase
-    .from("Ordens_Servico")
-    .select("*");
-=======
   const { data, error } = await supabase.from("Ordens_Servico").select("*");
->>>>>>> 8e44c6e (Correção do id de orderNumber adiçao para edição de OS)
 
   if (error) return res.status(500).json({ error: error.message });
 
@@ -205,20 +199,6 @@ app.get("/os", authenticateToken, async (req, res) => {
 
 // Listar OS do setor correspondente ao usuário logado
 app.get("/os/setor", authenticateToken, async (req, res) => {
-<<<<<<< HEAD
-  const setor = req.user.role; // setor é baseado no "role" do usuário
-
-  const { data, error } = await supabase
-    .from("Ordens_Servico")
-    .select("*");
-
-  if (error) return res.status(500).json({ error: error.message });
-
-  // Filtra as OS que possuem o setor no roteiro ou no setor atual
-  const filtradas = data.filter(
-    (os) =>
-      os.roteiro.includes(setor) || os.currentSector?.sector === setor
-=======
   const setor = req.user.role;
 
   const { data, error } = await supabase.from("Ordens_Servico").select("*");
@@ -229,7 +209,6 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
     (os) =>
       os.routing.some((r) => r.sector === setor) ||
       os.currentSector?.sector === setor
->>>>>>> 8e44c6e (Correção do id de orderNumber adiçao para edição de OS)
   );
 
   res.json(filtradas);
