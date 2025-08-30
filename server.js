@@ -86,43 +86,33 @@ app.post("/os", authenticateToken, async (req, res) => {
   res.json({ message: "OS criada com sucesso" });
 });
 
-// Editar OS
-app.put("/os/:orderNumber", authenticateToken, async (req, res) => {
+// Editar OS (PATCH)
+app.patch("/os/:orderNumber", authenticateToken, async (req, res) => {
   const { orderNumber } = req.params;
-  const {
-    partName,
-    partNumber,
-    quantity,
-    note,
-    status,
-    currentSector,
-    routing,
-  } = req.body;
+  const updates = req.body;
 
-  // PCP pode editar tudo
+  // PCP pode editar qualquer campo
   if (req.user.role === "PCP") {
     const { error } = await supabase
       .from("Ordens_Servico")
-      .update({
-        partName,
-        partNumber,
-        quantity,
-        note,
-        status,
-        currentSector,
-        routing,
-      })
+      .update(updates)
       .eq("orderNumber", orderNumber);
 
     if (error) return res.status(500).json({ error: error.message });
     return res.json({ message: "OS atualizada com sucesso (PCP)" });
   }
 
-  // Almoxarifado só pode atualizar quantidade
+  // Almoxarifado só pode editar quantidade
   if (req.user.role === "Almoxarifado") {
+    if (!("quantity" in updates)) {
+      return res
+        .status(400)
+        .json({ error: "Somente o campo 'quantity' pode ser atualizado" });
+    }
+
     const { error } = await supabase
       .from("Ordens_Servico")
-      .update({ quantity })
+      .update({ quantity: updates.quantity })
       .eq("orderNumber", orderNumber);
 
     if (error) return res.status(500).json({ error: error.message });
@@ -131,14 +121,14 @@ app.put("/os/:orderNumber", authenticateToken, async (req, res) => {
     });
   }
 
-  // Qualquer outro setor é proibido
+  // Outros setores não podem editar
   return res
     .status(403)
     .json({ error: "Você não tem permissão para editar esta OS" });
 });
 
 // Atualizar progresso da OS (por setor)
-app.post("/os/:orderNumber/progresso", authenticateToken, async (req, res) => {
+app.patch("/os/:orderNumber/progresso", authenticateToken, async (req, res) => {
   const { orderNumber } = req.params;
   const { status, quantidade_correta, quantidade_defeito } = req.body;
 
@@ -170,7 +160,7 @@ app.post("/os/:orderNumber/progresso", authenticateToken, async (req, res) => {
 });
 
 // PCP finaliza OS
-app.post("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
+app.patch("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
   if (req.user.role !== "PCP")
     return res.status(403).json({ error: "Acesso negado" });
 
