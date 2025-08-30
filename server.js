@@ -37,7 +37,6 @@ app.post("/login", async (req, res) => {
   if (error || !user)
     return res.status(400).json({ error: "Usuário não encontrado" });
 
-  // Comparação direta da senha
   if (password !== user.password) {
     return res.status(401).json({ error: "Senha incorreta" });
   }
@@ -57,7 +56,7 @@ app.post("/os", authenticateToken, async (req, res) => {
     return res.status(403).json({ error: "Acesso negado" });
 
   const {
-    OS_Number,
+    orderNumber,
     partName,
     partNumber,
     quantity,
@@ -70,7 +69,7 @@ app.post("/os", authenticateToken, async (req, res) => {
 
   const { error } = await supabase.from("Ordens_Servico").insert([
     {
-      OS_Number,
+      orderNumber,
       partName,
       partNumber,
       quantity,
@@ -87,23 +86,73 @@ app.post("/os", authenticateToken, async (req, res) => {
   res.json({ message: "OS criada com sucesso" });
 });
 
+// Editar OS
+app.put("/os/:orderNumber", authenticateToken, async (req, res) => {
+  const { orderNumber } = req.params;
+  const {
+    partName,
+    partNumber,
+    quantity,
+    note,
+    status,
+    currentSector,
+    routing,
+  } = req.body;
+
+  // PCP pode editar tudo
+  if (req.user.role === "PCP") {
+    const { error } = await supabase
+      .from("Ordens_Servico")
+      .update({
+        partName,
+        partNumber,
+        quantity,
+        note,
+        status,
+        currentSector,
+        routing,
+      })
+      .eq("orderNumber", orderNumber);
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ message: "OS atualizada com sucesso (PCP)" });
+  }
+
+  // Almoxarifado só pode atualizar quantidade
+  if (req.user.role === "Almoxarifado") {
+    const { error } = await supabase
+      .from("Ordens_Servico")
+      .update({ quantity })
+      .eq("orderNumber", orderNumber);
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({
+      message: "Quantidade atualizada com sucesso (Almoxarifado)",
+    });
+  }
+
+  // Qualquer outro setor é proibido
+  return res
+    .status(403)
+    .json({ error: "Você não tem permissão para editar esta OS" });
+});
+
 // Atualizar progresso da OS (por setor)
-app.post("/os/:id/progresso", authenticateToken, async (req, res) => {
-  const { id } = req.params;
+app.post("/os/:orderNumber/progresso", authenticateToken, async (req, res) => {
+  const { orderNumber } = req.params;
   const { status, quantidade_correta, quantidade_defeito } = req.body;
 
   const { data: os, error } = await supabase
     .from("Ordens_Servico")
     .select("*")
-    .eq("id", id)
+    .eq("orderNumber", orderNumber)
     .single();
 
   if (error || !os) return res.status(404).json({ error: "OS não encontrada" });
 
-  // Atualiza setor atual e status
   const atualizacoes = {
     status,
-    currentSector: req.user.role, // setor atual é o usuário que está atualizando
+    currentSector: req.user.role,
   };
 
   if (req.user.role === "Almoxarifado") {
@@ -112,24 +161,57 @@ app.post("/os/:id/progresso", authenticateToken, async (req, res) => {
     atualizacoes.status = "Aguardando verificação PCP";
   }
 
-  await supabase.from("Ordens_Servico").update(atualizacoes).eq("id", id);
+  await supabase
+    .from("Ordens_Servico")
+    .update(atualizacoes)
+    .eq("orderNumber", orderNumber);
 
   res.json({ message: "Progresso atualizado com sucesso" });
 });
 
 // PCP finaliza OS
-app.post("/os/:id/finalizar", authenticateToken, async (req, res) => {
+app.post("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
   if (req.user.role !== "PCP")
     return res.status(403).json({ error: "Acesso negado" });
 
-  const { id } = req.params;
+  const { orderNumber } = req.params;
 
   await supabase
     .from("Ordens_Servico")
     .update({ status: "Finalizado" })
-    .eq("id", id);
+    .eq("orderNumber", orderNumber);
 
   res.json({ message: "OS finalizada com sucesso" });
+});
+
+// Listar todas as OS (somente PCP)
+app.get("/os", authenticateToken, async (req, res) => {
+  if (req.user.role !== "PCP") {
+    return res.status(403).json({ error: "Acesso negado" });
+  }
+
+  const { data, error } = await supabase.from("Ordens_Servico").select("*");
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json(data);
+});
+
+// Listar OS do setor correspondente ao usuário logado
+app.get("/os/setor", authenticateToken, async (req, res) => {
+  const setor = req.user.role;
+
+  const { data, error } = await supabase.from("Ordens_Servico").select("*");
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const filtradas = data.filter(
+    (os) =>
+      os.routing.some((r) => r.sector === setor) ||
+      os.currentSector?.sector === setor
+  );
+
+  res.json(filtradas);
 });
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
