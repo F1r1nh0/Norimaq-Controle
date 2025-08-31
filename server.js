@@ -187,22 +187,6 @@ app.get("/os", authenticateToken, async (req, res) => {
   res.json(data);
 });
 
-// Buscar OS específica pelo orderNumber
-app.get("/os/:orderNumber", authenticateToken, async (req, res) => {
-  const { orderNumber } = req.params;
-
-  const { data, error } = await supabase
-    .from("Ordens_Servico")
-    .select("*")
-    .eq("orderNumber", orderNumber)
-    .single(); // pega apenas um registro
-
-  if (error || !data)
-    return res.status(404).json({ error: "OS não encontrada" });
-
-  res.json(data);
-});
-
 // Listar OS do setor correspondente ao usuário logado
 app.get("/os/setor", authenticateToken, async (req, res) => {
   const setor = req.user.role;
@@ -218,6 +202,22 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
   );
 
   res.json(filtradas);
+});
+
+// Buscar OS específica pelo orderNumber
+app.get("/os/:orderNumber", authenticateToken, async (req, res) => {
+  const { orderNumber } = req.params;
+
+  const { data, error } = await supabase
+    .from("Ordens_Servico")
+    .select("*")
+    .eq("orderNumber", orderNumber)
+    .single(); // pega apenas um registro
+
+  if (error || !data)
+    return res.status(404).json({ error: "OS não encontrada" });
+
+  res.json(data);
 });
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
