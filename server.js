@@ -206,7 +206,7 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
 
 // Buscar OS específica pelo orderNumber
 app.get("/os/:orderNumber", authenticateToken, async (req, res) => {
-  const { orderNumber } = req.params;
+  const orderNumber = Number(req.params.orderNumber); // converte para número
 
   const { data, error } = await supabase
     .from("Ordens_Servico")
