@@ -11,20 +11,33 @@ app.use(cors());
 
 const PORT = process.env.PORT || 3000;
 
-// Middleware de autenticação
+const jwt = require("jsonwebtoken");
+const { createClient } = require("@supabase/supabase-js");
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
+
+// Middleware de autenticação com access token
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
-  if (!token) return res.sendStatus(401);
+  if (!token) return res.status(401).json({ error: "Token não fornecido" });
 
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.sendStatus(403);
+    if (err) {
+      if (err.name === "TokenExpiredError") {
+        return res.status(401).json({ error: "Token expirado" });
+      }
+      return res.status(403).json({ error: "Token inválido" });
+    }
     req.user = user;
     next();
   });
 }
 
-// Login (sem bcrypt)
+// Login
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
@@ -36,18 +49,69 @@ app.post("/login", async (req, res) => {
 
   if (error || !user)
     return res.status(400).json({ error: "Usuário não encontrado" });
-
-  if (password !== user.password) {
+  if (password !== user.password)
     return res.status(401).json({ error: "Senha incorreta" });
-  }
 
-  const token = jwt.sign(
+  // Access token - expira rápido
+  const accessToken = jwt.sign(
     { id: user.id, role: user.role },
     process.env.JWT_SECRET,
-    { expiresIn: "8h" }
+    { expiresIn: "15m" }
   );
 
-  res.json({ token, role: user.role });
+  // Refresh token - expira mais lento
+  const refreshToken = jwt.sign(
+    { id: user.id },
+    process.env.JWT_REFRESH_SECRET,
+    { expiresIn: "7d" }
+  );
+
+  // Salva refresh token no banco
+  await supabase.from("users").update({ refreshToken }).eq("id", user.id);
+
+  res.json({ accessToken, refreshToken, role: user.role });
+});
+
+// Rota para renovar token
+app.post("/refresh", async (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken)
+    return res.status(401).json({ error: "Refresh token não fornecido" });
+
+  // Verifica se o refresh token existe no banco
+  const { data: user } = await supabase
+    .from("users")
+    .select("*")
+    .eq("refreshToken", refreshToken)
+    .single();
+
+  if (!user) return res.status(403).json({ error: "Refresh token inválido" });
+
+  jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, (err, decoded) => {
+    if (err)
+      return res
+        .status(403)
+        .json({ error: "Refresh token inválido ou expirado" });
+
+    // Gera novo access token
+    const newAccessToken = jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    res.json({ accessToken: newAccessToken });
+  });
+});
+
+// Logout → remove o refresh token do banco
+app.post("/logout", async (req, res) => {
+  const { refreshToken } = req.body;
+  await supabase
+    .from("users")
+    .update({ refreshToken: null })
+    .eq("refreshToken", refreshToken);
+  res.json({ message: "Logout realizado com sucesso" });
 });
 
 // Criar OS (apenas PCP)
@@ -206,7 +270,7 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
 
 // Buscar OS específica pelo orderNumber
 app.get("/os/:orderNumber", authenticateToken, async (req, res) => {
-  const orderNumber = Number(req.params.orderNumber); // converte para número
+  const orderNumber = req.params.orderNumber;
 
   const { data, error } = await supabase
     .from("Ordens_Servico")
