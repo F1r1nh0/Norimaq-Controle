@@ -187,6 +187,21 @@ app.get("/os", authenticateToken, async (req, res) => {
   res.json(data);
 });
 
+// Buscar OS específica
+app.get("/os/:orderNumber", authenticateToken, async (req, res) => {
+  const { orderNumber } = req.params;
+
+  const { data, error } = await supabase
+    .from("Ordens_Servico")
+    .select("*")
+    .eq("orderNumber", orderNumber)
+    .single();
+
+  if (error) return res.status(404).json({ error: "OS não encontrada" });
+
+  return res.json(data);
+});
+
 // Listar OS do setor correspondente ao usuário logado
 app.get("/os/setor", authenticateToken, async (req, res) => {
   const setor = req.user.role;
