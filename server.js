@@ -210,7 +210,8 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
       os.routing.some((r) => r.sector === setor) ||
       os.currentSector?.sector === setor
   );
-
+    res.json(filtradas);
+});
   // Buscar OS específica pelo orderNumber
 app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
   const orderNumber = req.params.orderNumber;
@@ -225,9 +226,6 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
     return res.status(404).json({ error: "OS não encontrada" });
 
   res.json(data);
-});
-
-  res.json(filtradas);
 });
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
