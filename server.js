@@ -211,6 +211,22 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
       os.currentSector?.sector === setor
   );
 
+  // Buscar OS específica pelo orderNumber
+app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
+  const orderNumber = req.params.orderNumber;
+
+  const { data, error } = await supabase
+    .from("Ordens_Servico")
+    .select("*")
+    .eq("orderNumber", orderNumber)
+    .single();
+
+  if (error || !data)
+    return res.status(404).json({ error: "OS não encontrada" });
+
+  res.json(data);
+});
+
   res.json(filtradas);
 });
 
