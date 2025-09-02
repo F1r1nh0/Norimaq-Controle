@@ -90,6 +90,7 @@ app.post("/os", authenticateToken, async (req, res) => {
 app.put("/os/:orderNumber", authenticateToken, async (req, res) => {
   const { orderNumber } = req.params;
   const {
+    orderNumber,
     partName,
     partNumber,
     quantity,
