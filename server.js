@@ -61,6 +61,7 @@ app.post("/os", authenticateToken, async (req, res) => {
     partNumber,
     quantity,
     note,
+    priority,
     createdAt,
     status,
     currentSector,
@@ -73,6 +74,7 @@ app.post("/os", authenticateToken, async (req, res) => {
       partName,
       partNumber,
       quantity,
+      priority,
       note,
       createdAt,
       status,
@@ -93,6 +95,7 @@ app.put("/os/:orderNumber", authenticateToken, async (req, res) => {
     orderNumber,
     partName,
     partNumber,
+    priority,
     quantity,
     note,
     status,
@@ -107,6 +110,7 @@ app.put("/os/:orderNumber", authenticateToken, async (req, res) => {
       .update({
         partName,
         partNumber,
+        priority,
         quantity,
         note,
         status,
@@ -187,7 +191,7 @@ app.post("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
 
 // Listar todas as OS (somente PCP)
 app.get("/os", authenticateToken, async (req, res) => {
-  if (req.user.role !== "PCP") {
+  if (req.user.role !== "PCP" && req.user.role !== "ALMOXARIFADO") {
     return res.status(403).json({ error: "Acesso negado" });
   }
 
