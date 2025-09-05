@@ -168,26 +168,21 @@ app.patch("/os/:orderNumber", authenticateToken, async (req, res) => {
   const { orderNumber } = req.params;
   const updates = req.body;
 
-  // PCP pode editar qualquer campo
-  if ((req.user.role !== "PCP" && req.user.role !== "ALMOXARIFADO")) {
-    const { error } = await supabase
+  // Só PCP ou ALMOXARIFADO podem editar
+  if (req.user.role === "PCP" || req.user.role === "ALMOXARIFADO") {
+    const { data, error } = await supabase
       .from("Ordens_Servico")
       .update(updates)
-      .eq("orderNumber", orderNumber);
+      .eq("orderNumber", orderNumber)
+      .select("*") // retorna os campos atualizados
+      .single();   // garante apenas 1 registro
 
     if (error) return res.status(500).json({ error: error.message });
-    return res.json({ message: "OS atualizada com sucesso (PCP)" });
-  }
 
-  // Almoxarifado só pode editar quantidade
-  if (req.user.role === "Almoxarifado") {
-    const { error } = await supabase
-      .from("Ordens_Servico")
-      .update(updates)
-      .eq("orderNumber", orderNumber);
-
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json({ message: "OS atualizada com sucesso (ALMOXARIFADO)" });
+    return res.json({
+      message: `OS atualizada com sucesso (${req.user.role})`,
+      updatedOS: data, // retorna a OS editada
+    });
   }
 
   // Outros setores não podem editar
