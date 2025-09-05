@@ -15,8 +15,7 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
-
-// Middleware de autenticação com access token
+// Middleware de autenticação
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
@@ -35,7 +34,6 @@ function authenticateToken(req, res, next) {
 }
 
 // Login
-
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
@@ -47,26 +45,28 @@ app.post("/login", async (req, res) => {
       .single();
 
     if (error || !user) {
-      console.error("Erro Supabase:", error);
       return res.status(400).json({ error: "Usuário não encontrado" });
     }
-  if (password !== user.password){
-    return res.status(401).json({ error: "Senha incorreta" });
-  }
 
-     // Access token - expira rápido
-      const accessToken = jwt.sign(
+    if (password !== user.password) {
+      return res.status(401).json({ error: "Senha incorreta" });
+    }
+
+    // Access token - expira rápido
+    const accessToken = jwt.sign(
       { id: user.id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "15m" }
     );
-  // Refresh token - expira mais lento
+
+    // Refresh token - expira mais lento
     const refreshToken = jwt.sign(
       { id: user.id },
       process.env.JWT_REFRESH_SECRET,
       { expiresIn: "7d" }
     );
-// Salva refresh token no banco
+
+    // Salva refresh token no banco
     await supabase.from("users").update({ refreshToken }).eq("id", user.id);
 
     res.json({ accessToken, refreshToken, role: user.role });
@@ -75,12 +75,6 @@ app.post("/login", async (req, res) => {
     res.status(500).json({ error: "Erro interno no servidor" });
   }
 });
-  // Refresh token - expira mais lento
-  const refreshToken = jwt.sign(
-    { id: user.id },
-    process.env.JWT_REFRESH_SECRET,
-    { expiresIn: "7d" }
-  );
 
 // Rota para renovar token
 app.post("/refresh", async (req, res) => {
@@ -97,7 +91,7 @@ app.post("/refresh", async (req, res) => {
 
   if (!user) return res.status(403).json({ error: "Refresh token inválido" });
 
-  jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, (err, decoded) => {
+  jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, (err) => {
     if (err)
       return res
         .status(403)
@@ -116,20 +110,20 @@ app.post("/refresh", async (req, res) => {
 
 // Verifica se o token é válido
 app.get("/auth", authenticateToken, (req, res) => {
-  // Se chegou aqui, o token foi validado pelo middleware
   res.json({
     valid: true,
-    user: req.user, // contém { id, role } do token
+    user: req.user, // { id, role }
   });
 });
 
-// Logout → remove o refresh token do banco (tirar)
+// Logout → remove refresh token
 app.post("/logout", async (req, res) => {
   const { refreshToken } = req.body;
   await supabase
     .from("users")
     .update({ refreshToken: null })
     .eq("refreshToken", refreshToken);
+
   res.json({ message: "Logout realizado com sucesso" });
 });
 
