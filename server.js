@@ -35,39 +35,52 @@ function authenticateToken(req, res, next) {
 }
 
 // Login
+
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
-  const { data: user, error } = await supabase
-    .from("users")
-    .select("*")
-    .eq("username", username)
-    .single();
+  try {
+    const { data: user, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("username", username)
+      .single();
 
-  if (error || !user)
-    return res.status(400).json({ error: "Usuário não encontrado" });
-  if (password !== user.password)
+    if (error || !user) {
+      console.error("Erro Supabase:", error);
+      return res.status(400).json({ error: "Usuário não encontrado" });
+    }
+  if (password !== user.password){
     return res.status(401).json({ error: "Senha incorreta" });
+  }
 
-  // Access token - expira rápido
-  const accessToken = jwt.sign(
-    { id: user.id, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: "15m" }
-  );
+     // Access token - expira rápido
+      const accessToken = jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+  // Refresh token - expira mais lento
+    const refreshToken = jwt.sign(
+      { id: user.id },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: "7d" }
+    );
+// Salva refresh token no banco
+    await supabase.from("users").update({ refreshToken }).eq("id", user.id);
 
+    res.json({ accessToken, refreshToken, role: user.role });
+  } catch (err) {
+    console.error("Erro inesperado no login:", err.message);
+    res.status(500).json({ error: "Erro interno no servidor" });
+  }
+});
   // Refresh token - expira mais lento
   const refreshToken = jwt.sign(
     { id: user.id },
     process.env.JWT_REFRESH_SECRET,
     { expiresIn: "7d" }
   );
-
-  // Salva refresh token no banco
-  await supabase.from("users").update({ refreshToken }).eq("id", user.id);
-
-  res.json({ accessToken, refreshToken, role: user.role });
-});
 
 // Rota para renovar token
 app.post("/refresh", async (req, res) => {
