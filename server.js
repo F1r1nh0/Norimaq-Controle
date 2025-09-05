@@ -284,4 +284,100 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
   res.json(data);
 });
 
+// Setor registra produção
+app.patch("/os/:orderNumber/producao", authenticateToken, async (req, res) => {
+  const { orderNumber } = req.params;
+  const { producedQuantity, defectiveQuantity } = req.body;
+
+  // Qualquer setor exceto PCP pode registrar
+  if (req.user.role === "PCP") {
+    return res.status(403).json({ error: "PCP não deve registrar produção, apenas validar" });
+  }
+
+  const { data: os, error } = await supabase
+    .from("Ordens_Servico")
+    .select("*")
+    .eq("orderNumber", orderNumber)
+    .single();
+
+  if (error || !os) return res.status(404).json({ error: "OS não encontrada" });
+
+  const atualizacoes = {
+    currentQuantity: producedQuantity,
+    defectiveQuantity,
+    status: "Aguardando verificação PCP",
+    pendingSector: req.user.role, // quem registrou a produção
+  };
+
+  const { data: updated, error: updateError } = await supabase
+    .from("Ordens_Servico")
+    .update(atualizacoes)
+    .eq("orderNumber", orderNumber)
+    .select("*")
+    .single();
+
+  if (updateError) return res.status(500).json({ error: updateError.message });
+
+  res.json({
+    message: `Produção registrada por ${req.user.role}. Aguardando PCP.`,
+    os: updated,
+  });
+});
+
+// PCP valida produção e libera próximo setor
+app.patch("/os/:orderNumber/validar", authenticateToken, async (req, res) => {
+  if (req.user.role !== "PCP") {
+    return res.status(403).json({ error: "Apenas o PCP pode validar a produção" });
+  }
+
+  const { orderNumber } = req.params;
+  const { aprovado } = req.body; // true ou false
+
+  const { data: os, error } = await supabase
+    .from("Ordens_Servico")
+    .select("*")
+    .eq("orderNumber", orderNumber)
+    .single();
+
+  if (error || !os) return res.status(404).json({ error: "OS não encontrada" });
+
+  if (os.status !== "Aguardando verificação PCP") {
+    return res.status(400).json({ error: "Não há produção pendente para validar" });
+  }
+
+  let atualizacoes = {};
+
+  if (aprovado) {
+    // Descobre o próximo setor no roteiro
+    const rota = os.routing;
+    const indexAtual = rota.findIndex(r => r.sector === os.pendingSector);
+    const proximo = rota[indexAtual + 1];
+
+    atualizacoes = {
+      status: proximo ? "Em andamento" : "Finalizado",
+      currentSector: proximo || null,
+      pendingSector: null,
+    };
+  } else {
+    atualizacoes = {
+      status: "Reprovado pelo PCP",
+    };
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("Ordens_Servico")
+    .update(atualizacoes)
+    .eq("orderNumber", orderNumber)
+    .select("*")
+    .single();
+
+  if (updateError) return res.status(500).json({ error: updateError.message });
+
+  res.json({
+    message: `Produção validada pelo PCP. ${aprovado ? "Avançando para próximo setor" : "Reprovada"}.`,
+    os: updated,
+  });
+});
+
+
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
