@@ -2,7 +2,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import cors from "cors";
 import dotenv from "dotenv";
-import supabase from "./supabaseClient.js";
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 const app = express();
@@ -11,20 +11,30 @@ app.use(cors());
 
 const PORT = process.env.PORT || 3000;
 
-// Middleware de autenticação
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
+
+// Middleware de autenticação com access token
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
-  if (!token) return res.sendStatus(401);
+  if (!token) return res.status(401).json({ error: "Token não fornecido" });
 
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.sendStatus(403);
+    if (err) {
+      if (err.name === "TokenExpiredError") {
+        return res.status(401).json({ error: "Token expirado" });
+      }
+      return res.status(403).json({ error: "Token inválido" });
+    }
     req.user = user;
     next();
   });
 }
 
-// Login (sem bcrypt)
+// Login
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
@@ -36,18 +46,69 @@ app.post("/login", async (req, res) => {
 
   if (error || !user)
     return res.status(400).json({ error: "Usuário não encontrado" });
-
-  if (password !== user.password) {
+  if (password !== user.password)
     return res.status(401).json({ error: "Senha incorreta" });
-  }
 
-  const token = jwt.sign(
+  // Access token - expira rápido
+  const accessToken = jwt.sign(
     { id: user.id, role: user.role },
     process.env.JWT_SECRET,
-    { expiresIn: "8h" }
+    { expiresIn: "15m" }
   );
 
-  res.json({ token, role: user.role });
+  // Refresh token - expira mais lento
+  const refreshToken = jwt.sign(
+    { id: user.id },
+    process.env.JWT_REFRESH_SECRET,
+    { expiresIn: "7d" }
+  );
+
+  // Salva refresh token no banco
+  await supabase.from("users").update({ refreshToken }).eq("id", user.id);
+
+  res.json({ accessToken, refreshToken, role: user.role });
+});
+
+// Rota para renovar token
+app.post("/refresh", async (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken)
+    return res.status(401).json({ error: "Refresh token não fornecido" });
+
+  // Verifica se o refresh token existe no banco
+  const { data: user } = await supabase
+    .from("users")
+    .select("*")
+    .eq("refreshToken", refreshToken)
+    .single();
+
+  if (!user) return res.status(403).json({ error: "Refresh token inválido" });
+
+  jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, (err, decoded) => {
+    if (err)
+      return res
+        .status(403)
+        .json({ error: "Refresh token inválido ou expirado" });
+
+    // Gera novo access token
+    const newAccessToken = jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    res.json({ accessToken: newAccessToken });
+  });
+});
+
+// Logout → remove o refresh token do banco (tirar)
+app.post("/logout", async (req, res) => {
+  const { refreshToken } = req.body;
+  await supabase
+    .from("users")
+    .update({ refreshToken: null })
+    .eq("refreshToken", refreshToken);
+  res.json({ message: "Logout realizado com sucesso" });
 });
 
 // Criar OS (apenas PCP)
@@ -61,7 +122,6 @@ app.post("/os", authenticateToken, async (req, res) => {
     partNumber,
     quantity,
     note,
-    priority,
     createdAt,
     status,
     currentSector,
@@ -74,7 +134,6 @@ app.post("/os", authenticateToken, async (req, res) => {
       partName,
       partNumber,
       quantity,
-      priority,
       note,
       createdAt,
       status,
@@ -88,62 +147,41 @@ app.post("/os", authenticateToken, async (req, res) => {
   res.json({ message: "OS criada com sucesso" });
 });
 
-// Editar OS
-app.put("/os/:orderNumber", authenticateToken, async (req, res) => {
+// Editar OS (PATCH)
+app.patch("/os/:orderNumber", authenticateToken, async (req, res) => {
   const { orderNumber } = req.params;
-  const {
-    orderNumber,
-    partName,
-    partNumber,
-    priority,
-    quantity,
-    note,
-    status,
-    currentSector,
-    routing,
-  } = req.body;
+  const updates = req.body;
 
-  // PCP pode editar tudo
-  if (req.user.role === "PCP") {
+  // PCP pode editar qualquer campo
+  if ((req.user.role !== "PCP" && req.user.role !== "ALMOXARIFADO")) {
     const { error } = await supabase
       .from("Ordens_Servico")
-      .update({
-        partName,
-        partNumber,
-        priority,
-        quantity,
-        note,
-        status,
-        currentSector,
-        routing,
-      })
+      .update(updates)
       .eq("orderNumber", orderNumber);
 
     if (error) return res.status(500).json({ error: error.message });
     return res.json({ message: "OS atualizada com sucesso (PCP)" });
   }
 
-  // Almoxarifado só pode atualizar quantidade
+  // Almoxarifado só pode editar quantidade
   if (req.user.role === "Almoxarifado") {
     const { error } = await supabase
       .from("Ordens_Servico")
-      .update({ quantity })
+      .update(updates)
       .eq("orderNumber", orderNumber);
 
     if (error) return res.status(500).json({ error: error.message });
-    return res.json({
-      message: "Quantidade atualizada com sucesso (Almoxarifado)",
-    });
+    return res.json({ message: "OS atualizada com sucesso (ALMOXARIFADO)" });
   }
 
-  // Qualquer outro setor é proibido
+  // Outros setores não podem editar
   return res
     .status(403)
     .json({ error: "Você não tem permissão para editar esta OS" });
 });
 
-// Atualizar progresso da OS (por setor)
-app.post("/os/:orderNumber/progresso", authenticateToken, async (req, res) => {
+// Atualizar progresso da OS (por setor) (retirar)
+app.patch("/os/:orderNumber/progresso", authenticateToken, async (req, res) => {
   const { orderNumber } = req.params;
   const { status, quantidade_correta, quantidade_defeito } = req.body;
 
@@ -174,8 +212,8 @@ app.post("/os/:orderNumber/progresso", authenticateToken, async (req, res) => {
   res.json({ message: "Progresso atualizado com sucesso" });
 });
 
-// PCP finaliza OS
-app.post("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
+// PCP finaliza OS (retirar)
+app.patch("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
   if (req.user.role !== "PCP")
     return res.status(403).json({ error: "Acesso negado" });
 
@@ -191,7 +229,7 @@ app.post("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
 
 // Listar todas as OS (somente PCP)
 app.get("/os", authenticateToken, async (req, res) => {
-  if (req.user.role !== "PCP" && req.user.role !== "ALMOXARIFADO") {
+  if (req.user.role !== "PCP") {
     return res.status(403).json({ error: "Acesso negado" });
   }
 
@@ -215,9 +253,11 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
       os.routing.some((r) => r.sector === setor) ||
       os.currentSector?.sector === setor
   );
-    res.json(filtradas);
+
+  res.json(filtradas);
 });
-  // Buscar OS específica pelo orderNumber
+
+// Buscar OS específica pelo orderNumber
 app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
   const orderNumber = req.params.orderNumber;
 
@@ -225,7 +265,7 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
     .from("Ordens_Servico")
     .select("*")
     .eq("orderNumber", orderNumber)
-    .single();
+    .single(); // pega apenas um registro
 
   if (error || !data)
     return res.status(404).json({ error: "OS não encontrada" });
