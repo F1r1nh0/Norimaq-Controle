@@ -101,6 +101,15 @@ app.post("/refresh", async (req, res) => {
   });
 });
 
+// Verifica se o token é válido
+app.get("/auth", authenticateToken, (req, res) => {
+  // Se chegou aqui, o token foi validado pelo middleware
+  res.json({
+    valid: true,
+    user: req.user, // contém { id, role } do token
+  });
+});
+
 // Logout → remove o refresh token do banco (tirar)
 app.post("/logout", async (req, res) => {
   const { refreshToken } = req.body;
