@@ -140,6 +140,7 @@ app.post("/os", authenticateToken, async (req, res) => {
     note,
     createdAt,
     status,
+    priority,
     currentSector,
     routing,
   } = req.body;
@@ -153,6 +154,7 @@ app.post("/os", authenticateToken, async (req, res) => {
       note,
       createdAt,
       status,
+      priority,
       currentSector,
       routing,
     },
