@@ -193,6 +193,24 @@ app.patch("/os/:orderNumber", authenticateToken, async (req, res) => {
     .json({ error: "Você não tem permissão para editar esta OS" });
 });
 
+// Deletar OS (apenas PCP)
+app.delete("/os/:orderNumber", authenticateToken, async (req, res) => {
+  if (req.user.role !== "PCP") {
+    return res.status(403).json({ error: "Apenas o PCP pode excluir uma OS" });
+  }
+
+  const { orderNumber } = req.params;
+
+  const { error } = await supabase
+    .from("Ordens_Servico")
+    .delete()
+    .eq("orderNumber", orderNumber);
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({ message: `OS ${orderNumber} excluída com sucesso` });
+});
+
 // Atualizar progresso da OS (por setor) (retirar)
 app.patch("/os/:orderNumber/progresso", authenticateToken, async (req, res) => {
   const { orderNumber } = req.params;
