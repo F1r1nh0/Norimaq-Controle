@@ -279,11 +279,10 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
 
+  // Agora filtra apenas pelo setor atual
   const filtradas = data.filter(
-    (os) =>
-      os.routing.some((r) => r.sector === setor) ||
-      os.currentSector?.sector === setor
-  );
+  (os) => os.currentSector?.sector === setor
+);
 
   res.json(filtradas);
 });
