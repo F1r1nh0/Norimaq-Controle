@@ -221,39 +221,6 @@ app.delete("/os/:orderNumber", authenticateToken, async (req, res) => {
 
   res.json({ message: `OS ${orderNumber} excluída com sucesso` });
 });
-
-// Atualizar progresso da OS (por setor) (retirar)
-app.patch("/os/:orderNumber/progresso", authenticateToken, async (req, res) => {
-  const { orderNumber } = req.params;
-  const { status, quantidade_correta, quantidade_defeito } = req.body;
-
-  const { data: os, error } = await supabase
-    .from("Ordens_Servico")
-    .select("*")
-    .eq("orderNumber", orderNumber)
-    .single();
-
-  if (error || !os) return res.status(404).json({ error: "OS não encontrada" });
-
-  const atualizacoes = {
-    status,
-    currentSector: req.user.role,
-  };
-
-  if (req.user.role === "Almoxarifado") {
-    atualizacoes.quantidade_correta = quantidade_correta;
-    atualizacoes.quantidade_defeito = quantidade_defeito;
-    atualizacoes.status = "Aguardando verificação PCP";
-  }
-
-  await supabase
-    .from("Ordens_Servico")
-    .update(atualizacoes)
-    .eq("orderNumber", orderNumber);
-
-  res.json({ message: "Progresso atualizado com sucesso" });
-});
-
 // PCP finaliza OS (retirar)
 app.patch("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
   if (req.user.role !== "PCP")
@@ -313,15 +280,18 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
 
   res.json(data);
 });
-
 // Setor registra produção
 app.patch("/os/:orderNumber/producao", authenticateToken, async (req, res) => {
   const { orderNumber } = req.params;
-  const { producedQuantity, defectiveQuantity } = req.body;
+  const { producedQuantity, defectiveQuantity, operatorName } = req.body;
 
-  // Qualquer setor exceto PCP pode registrar
+  // PCP não pode registrar
   if (req.user.role === "PCP") {
     return res.status(403).json({ error: "PCP não deve registrar produção, apenas validar" });
+  }
+
+  if (!operatorName) {
+    return res.status(400).json({ error: "Nome do operador é obrigatório" });
   }
 
   const { data: os, error } = await supabase
@@ -335,8 +305,9 @@ app.patch("/os/:orderNumber/producao", authenticateToken, async (req, res) => {
   const atualizacoes = {
     currentQuantity: producedQuantity,
     defectiveQuantity,
+    operatorName, // <-- registrando o operador
     status: "Aguardando verificação PCP",
-    pendingSector: req.user.role, // quem registrou a produção
+    pendingSector: req.user.role,
   };
 
   const { data: updated, error: updateError } = await supabase
@@ -349,11 +320,10 @@ app.patch("/os/:orderNumber/producao", authenticateToken, async (req, res) => {
   if (updateError) return res.status(500).json({ error: updateError.message });
 
   res.json({
-    message: `Produção registrada por ${req.user.role}. Aguardando PCP.`,
+    message: `Produção registrada por ${req.user.role} (${operatorName}). Aguardando PCP.`,
     os: updated,
   });
 });
-
 // PCP valida produção e libera próximo setor
 app.patch("/os/:orderNumber/validar", authenticateToken, async (req, res) => {
   if (req.user.role !== "PCP") {
