@@ -15,6 +15,18 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
+// Configuração de CORS
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000", // local
+      "https://controle-norimaq.vercel.app", // produção
+    ],
+    methods: ["GET", "POST", "PATCH", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true, // importante se for usar cookies
+  })
+);
 // Middleware de autenticação
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
