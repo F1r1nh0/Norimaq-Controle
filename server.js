@@ -199,11 +199,6 @@ app.patch("/os/:orderNumber", authenticateToken, async (req, res) => {
   });
 });
 
-  // Outros setores não podem editar
-  return res
-    .status(403)
-    .json({ error: "Você não tem permissão para editar esta OS" });
-});
 
 // Deletar OS (apenas PCP)
 app.delete("/os/:orderNumber", authenticateToken, async (req, res) => {
