@@ -282,6 +282,52 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
 
   res.json(data);
 });
+// Iniciar OS (caso seja o primeiro no Roteiro)
+app.post("/os/iniciar", authenticateToken, async (req, res) => {
+  const { orderNumber, operador } = req.body;
+  const setor = req.user.role;
+
+  // Buscar OS
+  const { data: os, error } = await supabase
+    .from("Ordens_Servico")
+    .select("*")
+    .eq("orderNumber", orderNumber)
+    .single();
+
+  if (error || !os) return res.status(404).json({ error: "OS não encontrada" });
+
+  const currentSector = os.currentSector;
+  const routing = os.routing || [];
+
+  // Verifica se o setor logado é o setor atual
+  if (currentSector?.sector !== setor) {
+    return res.status(403).json({ error: "Este setor não pode iniciar a OS" });
+  }
+
+  // Se for o primeiro setor do roteiro → precisa informar operador
+  if (routing.length > 0 && routing[0].sector === setor) {
+    if (!operador) {
+      return res.status(400).json({ error: "Nome do operador é obrigatório para iniciar no primeiro setor" });
+    }
+  }
+
+  // Atualiza OS com status iniciado e operador (se informado)
+  const updates = {
+    currentSector: { ...currentSector, status: "Iniciado", operador: operador || null },
+    status: "Em produção"
+  };
+
+  const { data: updated, error: updateError } = await supabase
+    .from("Ordens_Servico")
+    .update(updates)
+    .eq("orderNumber", orderNumber)
+    .select();
+
+  if (updateError) return res.status(500).json({ error: updateError.message });
+
+  res.json({ message: "Produção iniciada com sucesso", ordem: updated[0] });
+});
+
 // Setor registra produção
 app.patch("/os/:orderNumber/producao", authenticateToken, async (req, res) => {
   const { orderNumber } = req.params;
