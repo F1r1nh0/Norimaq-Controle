@@ -199,8 +199,6 @@ app.patch("/os/:orderNumber", authenticateToken, async (req, res) => {
   });
 });
 
-  }
-
   // Outros setores não podem editar
   return res
     .status(403)
