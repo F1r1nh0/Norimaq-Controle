@@ -376,22 +376,32 @@ app.patch("/os/:orderNumber/validar", authenticateToken, async (req, res) => {
   });
 });
 
-// Listar todos os logs de uma OS específica
+// Todos os logs
+app.get("/log", authenticateToken, async (req, res) => {
+  const { data, error } = await supabase
+    .from("Log_OS")
+    .select("*")
+    .order("data", { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// Logs de uma OS específica
 app.get("/log/:orderNumber", authenticateToken, async (req, res) => {
   const { orderNumber } = req.params;
-
   const { data, error } = await supabase
     .from("Log_OS")
     .select("*")
     .eq("orderNumber", orderNumber)
-    .order("data", { ascending: false }); // mais recentes primeiro
+    .order("data", { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
-
   res.json(data);
 });
 
 // Criar um log (qualquer setor pode registrar uma ação)
+
 app.post("/log", authenticateToken, async (req, res) => {
   const { orderNumber, description } = req.body;
 
