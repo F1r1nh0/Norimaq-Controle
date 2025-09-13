@@ -401,26 +401,20 @@ app.get("/log/:orderNumber", authenticateToken, async (req, res) => {
 });
 
 // Criar um log (qualquer setor pode registrar uma ação)
-
 app.post("/log", authenticateToken, async (req, res) => {
-  const { orderNumber, description } = req.body;
+  const { sector, description, date, orderNumber } = req.body;
 
-  if (!orderNumber || !description) {
-    return res.status(400).json({ error: "orderNumber e description são obrigatórios" });
+  if (!sector || !description || !date || !orderNumber) {
+    return res.status(400).json({ error: "Todos os campos são obrigatórios" });
   }
 
-  const log = {
-    orderNumber,
-    sector: req.user.role, // pega do token quem está logado
-    description,
-    data: Date.now()
-  };
-
-  const { error } = await supabase.from("Log_OS").insert([log]);
+  const { data, error } = await supabase
+    .from("Log_OS")
+    .insert([{ sector, description, date, orderNumber }]);
 
   if (error) return res.status(500).json({ error: error.message });
 
-  res.json({ message: "Log registrado com sucesso", log });
+  res.json({ message: "Log registrado com sucesso", log: data[0] });
 });
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
