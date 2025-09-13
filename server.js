@@ -381,7 +381,7 @@ app.get("/log", authenticateToken, async (req, res) => {
   const { data, error } = await supabase
     .from("Log_OS")
     .select("*")
-    .order("data", { ascending: false });
+    .order("date", { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
