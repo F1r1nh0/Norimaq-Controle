@@ -376,5 +376,41 @@ app.patch("/os/:orderNumber/validar", authenticateToken, async (req, res) => {
   });
 });
 
+// Listar todos os logs de uma OS específica
+app.get("/log/:orderNumber", authenticateToken, async (req, res) => {
+  const { orderNumber } = req.params;
+
+  const { data, error } = await supabase
+    .from("Log_OS")
+    .select("*")
+    .eq("orderNumber", orderNumber)
+    .order("data", { ascending: false }); // mais recentes primeiro
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json(data);
+});
+
+// Criar um log (qualquer setor pode registrar uma ação)
+app.post("/log", authenticateToken, async (req, res) => {
+  const { orderNumber, description } = req.body;
+
+  if (!orderNumber || !description) {
+    return res.status(400).json({ error: "orderNumber e description são obrigatórios" });
+  }
+
+  const log = {
+    orderNumber,
+    sector: req.user.role, // pega do token quem está logado
+    description,
+    data: Date.now()
+  };
+
+  const { error } = await supabase.from("Log_OS").insert([log]);
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({ message: "Log registrado com sucesso", log });
+});
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
