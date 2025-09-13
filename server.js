@@ -394,7 +394,7 @@ app.get("/log/:orderNumber", authenticateToken, async (req, res) => {
     .from("Log_OS")
     .select("*")
     .eq("orderNumber", orderNumber)
-    .order("data", { ascending: false });
+    .order("date", { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
