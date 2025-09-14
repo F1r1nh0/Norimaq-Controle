@@ -410,11 +410,33 @@ app.post("/log", authenticateToken, async (req, res) => {
 
   const { data, error } = await supabase
     .from("Log_OS")
-    .insert([{ sector, description, date, orderNumber }]);
+    .insert([{ sector, description, date, orderNumber }])
+    .select(); // 🔥 garante retorno dos dados
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    console.error("Erro ao inserir log:", error);
+    return res.status(500).json({ error: error.message });
+  }
 
   res.json({ message: "Log registrado com sucesso", log: data[0] });
 });
+
+// Deletar um log pelo ID
+app.delete("/log/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  const { error } = await supabase
+    .from("Log_OS")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error("Erro ao deletar log:", error);
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json({ message: `Log ${id} deletado com sucesso` });
+});
+
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
