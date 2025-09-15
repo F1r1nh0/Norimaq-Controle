@@ -438,5 +438,30 @@ app.delete("/log/:id", authenticateToken, async (req, res) => {
   res.json({ message: `Log ${id} deletado com sucesso` });
 });
 
+// Atualizar orderNumber nos logs
+app.patch("/log/:orderNumber", authenticateToken, async (req, res) => {
+  const { orderNumber } = req.params;       // orderNumber antigo
+  const { newOrderNumber } = req.body;      // novo orderNumber
+
+  if (!newOrderNumber) {
+    return res.status(400).json({ error: "O campo newOrderNumber é obrigatório" });
+  }
+
+  const { data, error } = await supabase
+    .from("Log_OS")
+    .update({ orderNumber: newOrderNumber })
+    .eq("orderNumber", orderNumber)
+    .select("*"); // retorna os registros atualizados
+
+  if (error) {
+    console.error("Erro ao atualizar logs:", error);
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json({
+    message: `Logs atualizados: ${orderNumber} → ${newOrderNumber}`,
+    logs: data
+  });
+});
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
