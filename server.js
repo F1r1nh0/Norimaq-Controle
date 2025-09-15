@@ -438,29 +438,26 @@ app.delete("/log/:id", authenticateToken, async (req, res) => {
   res.json({ message: `Log ${id} deletado com sucesso` });
 });
 
-// Atualizar orderNumber nos logs
+// Atualizar orderNumber nos log
 app.patch("/log/:orderNumber", authenticateToken, async (req, res) => {
-  const { orderNumber } = req.params;       // orderNumber antigo
-  const { newOrderNumber } = req.body;      // novo orderNumber
+  const { orderNumber } = req.params; // orderNumber antigo
+  const { orderNumber: newOrderNumber } = req.body; // orderNumber novo
 
   if (!newOrderNumber) {
-    return res.status(400).json({ error: "O campo newOrderNumber é obrigatório" });
+    return res.status(400).json({ error: "Novo orderNumber é obrigatório" });
   }
 
   const { data, error } = await supabase
     .from("Log_OS")
     .update({ orderNumber: newOrderNumber })
     .eq("orderNumber", orderNumber)
-    .select("*"); // retorna os registros atualizados
+    .select("*");
 
-  if (error) {
-    console.error("Erro ao atualizar logs:", error);
-    return res.status(500).json({ error: error.message });
-  }
+  if (error) return res.status(500).json({ error: error.message });
 
   res.json({
-    message: `Logs atualizados: ${orderNumber} → ${newOrderNumber}`,
-    logs: data
+    message: "Logs atualizados com sucesso",
+    updatedLogs: data,
   });
 });
 
