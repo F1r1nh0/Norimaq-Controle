@@ -411,7 +411,7 @@ app.post("/log", authenticateToken, async (req, res) => {
   const { data, error } = await supabase
     .from("Log_OS")
     .insert([{ sector, description, date, orderNumber }])
-    .select(); // 🔥 garante retorno dos dados
+    .select();
 
   if (error) {
     console.error("Erro ao inserir log:", error);
@@ -443,10 +443,17 @@ app.patch("/log/:orderNumber", authenticateToken, async (req, res) => {
   const { orderNumber } = req.params; // orderNumber antigo
   const { orderNumber: newOrderNumber } = req.body; // orderNumber novo
 
-  if (!newOrderNumber) {
+  // Se veio string vazia → erro
+  if (newOrderNumber === "") {
+    return res.status(400).json({ error: "orderNumber não pode ser vazio" });
+  }
+
+  // Se não veio nada no body erro
+  if (newOrderNumber === undefined) {
     return res.status(400).json({ error: "Novo orderNumber é obrigatório" });
   }
 
+  // Se veio null permite atualizar para null
   const { data, error } = await supabase
     .from("Log_OS")
     .update({ orderNumber: newOrderNumber })
@@ -460,5 +467,6 @@ app.patch("/log/:orderNumber", authenticateToken, async (req, res) => {
     updatedLogs: data,
   });
 });
+
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
