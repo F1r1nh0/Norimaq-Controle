@@ -477,7 +477,6 @@ app.patch("/log/:orderNumber", authenticateToken, async (req, res) => {
     updatedLogs: data,
   });
 });
-// pra formatar data bonitinho
 
 //Pausa todas as OS em produção às 17h
 cron.schedule("0 17 * * *", async () => {
@@ -513,11 +512,10 @@ cron.schedule("0 17 * * *", async () => {
 
     const logs = pausadas.map((os) => ({
       orderNumber: os.orderNumber,
-      setor: os.setor || "Sistema",
+      sector: os.sector,
       usuario: "Sistema Automático",
-      acao: "Pausar Produção",
-      descricao: `Produção pausada automaticamente às 17h (${agora})`,
-      created_at: agora,
+      description: `Produção pausada automaticamente às 17h (${agora})`,
+      date: agora,
     }));
 
     const { error: erroLog } = await supabase.from("Log_OS").insert(logs);
