@@ -432,7 +432,7 @@ app.get("/log/:orderNumber", authenticateToken, async (req, res) => {
 app.post("/log", authenticateToken, async (req, res) => {
   const { sector, description, date, orderNumber } = req.body;
 
-  if (!sector || !description || !date || !orderNumber) {
+  if (!sector || !description || !date || orderNumber === undefined) {
     return res.status(400).json({ error: "Todos os campos são obrigatórios" });
   }
 
