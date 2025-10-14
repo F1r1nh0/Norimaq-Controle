@@ -488,7 +488,7 @@ app.patch("/log/:orderNumber", authenticateToken, async (req, res) => {
 });
 
 //Pausa todas as OS em produção às 17h
-cron.schedule("0 17 * * *", async () => {
+cron.schedule("20 23 * * *", async () => {
   console.log("Executando pausa automática de OS em produção...");
 
   try {
