@@ -256,14 +256,23 @@ app.get("/os", authenticateToken, async (req, res) => {
 app.get("/os/setor", authenticateToken, async (req, res) => {
   const setor = req.user.role;
 
-  const { data, error } = await supabase.from("Ordens_Servico").select("*");
+  try {
+    const { data, error } = await supabase.from("Ordens_Servico").select("*");
+    if (error) return res.status(500).json({ error: error.message });
 
-  if (error) return res.status(500).json({ error: error.message });
+    const filtradas = data.filter((os) => {
+      const passouPorSetor = os.setoresConcluidos?.includes?.(setor);
+      const setorAtual = os.currentSector?.sector === setor;
+      const finalizada = os.status === "finalizado";
 
-  // Agora filtra apenas pelo setor atual
-  const filtradas = data.filter((os) => os.currentSector?.sector === setor);
+      return setorAtual || (finalizada && passouPorSetor);
+    });
 
-  res.json(filtradas);
+    res.json(filtradas);
+  } catch (err) {
+    console.error("Erro ao listar OS por setor:", err.message);
+    res.status(500).json({ error: "Erro interno ao listar OS" });
+  }
 });
 
 // Buscar OS específica pelo orderNumber
