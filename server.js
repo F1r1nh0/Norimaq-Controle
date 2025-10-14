@@ -508,7 +508,7 @@ cron.schedule("0 17 * * *", async () => {
     //Pausar todas
     const { data: pausadas, error: erroPausa } = await supabase
       .from("Ordens_Servico")
-      .update({ status: "Pausado" })
+      .update({ status: "Pausada" })
       .eq("status", "Em produção")
       .select("*");
 
