@@ -521,8 +521,7 @@ cron.schedule("0 17 * * *", async () => {
 
     const logs = pausadas.map((os) => ({
       orderNumber: os.orderNumber,
-      sector: os.sector,
-      usuario: "Sistema Automático",
+      sector: "Sistema",
       description: `Produção pausada automaticamente às 17h (${agora})`,
       date: agora,
     }));
