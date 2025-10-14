@@ -3,11 +3,12 @@ import jwt from "jsonwebtoken";
 import cors from "cors";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+import cron from "node-cron";
+import dayjs from "dayjs";
 
 dotenv.config();
 const app = express();
 app.use(express.json());
-app.use(cors());
 
 const PORT = process.env.PORT || 3000;
 
@@ -15,8 +16,19 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
-
-// Middleware de autenticação com access token
+// Configuração de CORS
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000", // local
+      "https://controle-norimaq.vercel.app", // produção
+    ],
+    methods: ["GET", "POST", "PATCH", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true, // importante se for usar cookies
+  })
+);
+// Middleware de autenticação
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
@@ -33,40 +45,54 @@ function authenticateToken(req, res, next) {
     next();
   });
 }
-
 // Login
 app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, selectedRole } = req.body; // <- adicionamos selectedRole
 
-  const { data: user, error } = await supabase
-    .from("users")
-    .select("*")
-    .eq("username", username)
-    .single();
+  try {
+    const { data: user, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("username", username)
+      .single();
 
-  if (error || !user)
-    return res.status(400).json({ error: "Usuário não encontrado" });
-  if (password !== user.password)
-    return res.status(401).json({ error: "Senha incorreta" });
+    if (error || !user) {
+      return res.status(400).json({ error: "Credenciais inválidas" });
+    }
 
-  // Access token - expira rápido
-  const accessToken = jwt.sign(
-    { id: user.id, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: "15m" }
-  );
+    if (password !== user.password) {
+      return res.status(401).json({ error: "Credenciais inválidas" });
+    }
 
-  // Refresh token - expira mais lento
-  const refreshToken = jwt.sign(
-    { id: user.id },
-    process.env.JWT_REFRESH_SECRET,
-    { expiresIn: "7d" }
-  );
+    // Verifica se o setor escolhido confere com o setor do usuário no banco
+    if (selectedRole && selectedRole !== user.role) {
+      return res.status(403).json({
+        error: `Credenciais inválidas`,
+      });
+    }
 
-  // Salva refresh token no banco
-  await supabase.from("users").update({ refreshToken }).eq("id", user.id);
+    // Access token - expira rápido
+    const accessToken = jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
 
-  res.json({ accessToken, refreshToken, role: user.role });
+    // Refresh token - expira mais lento
+    const refreshToken = jwt.sign(
+      { id: user.id },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    // Salva refresh token no banco
+    await supabase.from("users").update({ refreshToken }).eq("id", user.id);
+
+    res.json({ accessToken, refreshToken, role: user.role });
+  } catch (err) {
+    console.error("Erro inesperado no login:", err.message);
+    res.status(500).json({ error: "Erro interno no servidor" });
+  }
 });
 
 // Rota para renovar token
@@ -84,7 +110,7 @@ app.post("/refresh", async (req, res) => {
 
   if (!user) return res.status(403).json({ error: "Refresh token inválido" });
 
-  jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, (err, decoded) => {
+  jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, (err) => {
     if (err)
       return res
         .status(403)
@@ -101,13 +127,22 @@ app.post("/refresh", async (req, res) => {
   });
 });
 
-// Logout → remove o refresh token do banco
+// Verifica se o token é válido
+app.get("/auth", authenticateToken, (req, res) => {
+  res.json({
+    valid: true,
+    user: req.user, // { id, role }
+  });
+});
+
+// Logout → remove refresh token
 app.post("/logout", async (req, res) => {
   const { refreshToken } = req.body;
   await supabase
     .from("users")
     .update({ refreshToken: null })
     .eq("refreshToken", refreshToken);
+
   res.json({ message: "Logout realizado com sucesso" });
 });
 
@@ -124,8 +159,10 @@ app.post("/os", authenticateToken, async (req, res) => {
     note,
     createdAt,
     status,
+    priority,
     currentSector,
     routing,
+    progressDetails,
   } = req.body;
 
   const { error } = await supabase.from("Ordens_Servico").insert([
@@ -137,8 +174,10 @@ app.post("/os", authenticateToken, async (req, res) => {
       note,
       createdAt,
       status,
+      priority,
       currentSector,
       routing,
+      progressDetails,
     },
   ]);
 
@@ -152,75 +191,40 @@ app.patch("/os/:orderNumber", authenticateToken, async (req, res) => {
   const { orderNumber } = req.params;
   const updates = req.body;
 
-  // PCP pode editar qualquer campo
-  if (req.user.role === "PCP") {
-    const { error } = await supabase
-      .from("Ordens_Servico")
-      .update(updates)
-      .eq("orderNumber", orderNumber);
-
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json({ message: "OS atualizada com sucesso (PCP)" });
-  }
-
-  // Almoxarifado só pode editar quantidade
-  if (req.user.role === "Almoxarifado") {
-    if (!("quantity" in updates)) {
-      return res
-        .status(400)
-        .json({ error: "Somente o campo 'quantity' pode ser atualizado" });
-    }
-
-    const { error } = await supabase
-      .from("Ordens_Servico")
-      .update({ quantity: updates.quantity })
-      .eq("orderNumber", orderNumber);
-
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json({
-      message: "Quantidade atualizada com sucesso (Almoxarifado)",
-    });
-  }
-
-  // Outros setores não podem editar
-  return res
-    .status(403)
-    .json({ error: "Você não tem permissão para editar esta OS" });
-});
-
-// Atualizar progresso da OS (por setor)
-app.patch("/os/:orderNumber/progresso", authenticateToken, async (req, res) => {
-  const { orderNumber } = req.params;
-  const { status, quantidade_correta, quantidade_defeito } = req.body;
-
-  const { data: os, error } = await supabase
+  // Qualquer usuário autenticado pode editar
+  const { data, error } = await supabase
     .from("Ordens_Servico")
-    .select("*")
+    .update(updates)
     .eq("orderNumber", orderNumber)
+    .select("*") // retorna os campos atualizados
     .single();
 
-  if (error || !os) return res.status(404).json({ error: "OS não encontrada" });
+  if (error) return res.status(500).json({ error: error.message });
 
-  const atualizacoes = {
-    status,
-    currentSector: req.user.role,
-  };
-
-  if (req.user.role === "Almoxarifado") {
-    atualizacoes.quantidade_correta = quantidade_correta;
-    atualizacoes.quantidade_defeito = quantidade_defeito;
-    atualizacoes.status = "Aguardando verificação PCP";
-  }
-
-  await supabase
-    .from("Ordens_Servico")
-    .update(atualizacoes)
-    .eq("orderNumber", orderNumber);
-
-  res.json({ message: "Progresso atualizado com sucesso" });
+  return res.json({
+    message: `OS atualizada com sucesso (${req.user.role})`,
+    updatedOS: data, // retorna a OS editada
+  });
 });
 
-// PCP finaliza OS
+// Deletar OS (apenas PCP)
+app.delete("/os/:orderNumber", authenticateToken, async (req, res) => {
+  if (req.user.role !== "PCP") {
+    return res.status(403).json({ error: "Apenas o PCP pode excluir uma OS" });
+  }
+
+  const { orderNumber } = req.params;
+
+  const { error } = await supabase
+    .from("Ordens_Servico")
+    .delete()
+    .eq("orderNumber", orderNumber);
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({ message: `OS ${orderNumber} excluída com sucesso` });
+});
+// PCP finaliza OS (retirar)
 app.patch("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
   if (req.user.role !== "PCP")
     return res.status(403).json({ error: "Acesso negado" });
@@ -237,7 +241,7 @@ app.patch("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
 
 // Listar todas as OS (somente PCP)
 app.get("/os", authenticateToken, async (req, res) => {
-  if (req.user.role !== "PCP") {
+  if (req.user.role !== "PCP" && req.user.role !== "ALMOXARIFADO") {
     return res.status(403).json({ error: "Acesso negado" });
   }
 
@@ -256,17 +260,14 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
 
-  const filtradas = data.filter(
-    (os) =>
-      os.routing.some((r) => r.sector === setor) ||
-      os.currentSector?.sector === setor
-  );
+  // Agora filtra apenas pelo setor atual
+  const filtradas = data.filter((os) => os.currentSector?.sector === setor);
 
   res.json(filtradas);
 });
 
 // Buscar OS específica pelo orderNumber
-app.get("/os/ler/:orderNumber", authenticateToken, async (req, res) => {
+app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
   const orderNumber = req.params.orderNumber;
 
   const { data, error } = await supabase
@@ -279,6 +280,256 @@ app.get("/os/ler/:orderNumber", authenticateToken, async (req, res) => {
     return res.status(404).json({ error: "OS não encontrada" });
 
   res.json(data);
+});
+
+// Setor registra produção
+app.patch("/os/:orderNumber/producao", authenticateToken, async (req, res) => {
+  const { orderNumber } = req.params;
+  const { producedQuantity, defectiveQuantity, operatorName } = req.body;
+
+  // PCP não pode registrar
+  if (req.user.role === "PCP") {
+    return res
+      .status(403)
+      .json({ error: "PCP não deve registrar produção, apenas validar" });
+  }
+
+  if (!operatorName) {
+    return res.status(400).json({ error: "Nome do operador é obrigatório" });
+  }
+
+  const { data: os, error } = await supabase
+    .from("Ordens_Servico")
+    .select("*")
+    .eq("orderNumber", orderNumber)
+    .single();
+
+  if (error || !os) return res.status(404).json({ error: "OS não encontrada" });
+
+  const atualizacoes = {
+    currentQuantity: producedQuantity,
+    defectiveQuantity,
+    operatorName, // <-- registrando o operador
+    status: "Aguardando verificação PCP",
+    pendingSector: req.user.role,
+  };
+
+  const { data: updated, error: updateError } = await supabase
+    .from("Ordens_Servico")
+    .update(atualizacoes)
+    .eq("orderNumber", orderNumber)
+    .select("*")
+    .single();
+
+  if (updateError) return res.status(500).json({ error: updateError.message });
+
+  res.json({
+    message: `Produção registrada por ${req.user.role} (${operatorName}). Aguardando PCP.`,
+    os: updated,
+  });
+});
+// PCP valida produção e libera próximo setor
+app.patch("/os/:orderNumber/validar", authenticateToken, async (req, res) => {
+  if (req.user.role !== "PCP") {
+    return res
+      .status(403)
+      .json({ error: "Apenas o PCP pode validar a produção" });
+  }
+
+  const { orderNumber } = req.params;
+  const { aprovado } = req.body; // true ou false
+
+  const { data: os, error } = await supabase
+    .from("Ordens_Servico")
+    .select("*")
+    .eq("orderNumber", orderNumber)
+    .single();
+
+  if (error || !os) return res.status(404).json({ error: "OS não encontrada" });
+
+  if (os.status !== "Aguardando verificação PCP") {
+    return res
+      .status(400)
+      .json({ error: "Não há produção pendente para validar" });
+  }
+
+  let atualizacoes = {};
+
+  if (aprovado) {
+    // Descobre o próximo setor no roteiro
+    const rota = os.routing;
+    const indexAtual = rota.findIndex((r) => r.sector === os.pendingSector);
+    const proximo = rota[indexAtual + 1];
+
+    atualizacoes = {
+      status: proximo ? "Em andamento" : "Finalizado",
+      currentSector: proximo || null,
+      pendingSector: null,
+    };
+  } else {
+    atualizacoes = {
+      status: "Reprovado pelo PCP",
+    };
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("Ordens_Servico")
+    .update(atualizacoes)
+    .eq("orderNumber", orderNumber)
+    .select("*")
+    .single();
+
+  if (updateError) return res.status(500).json({ error: updateError.message });
+
+  res.json({
+    message: `Produção validada pelo PCP. ${
+      aprovado ? "Avançando para próximo setor" : "Reprovada"
+    }.`,
+    os: updated,
+  });
+});
+
+// Todos os logs
+app.get("/log", authenticateToken, async (req, res) => {
+  const { data, error } = await supabase
+    .from("Log_OS")
+    .select("*")
+    .order("date", { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// Logs de uma OS específica
+app.get("/log/:orderNumber", authenticateToken, async (req, res) => {
+  const { orderNumber } = req.params;
+  const { data, error } = await supabase
+    .from("Log_OS")
+    .select("*")
+    .eq("orderNumber", orderNumber)
+    .order("date", { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// Criar um log (qualquer setor pode registrar uma ação)
+app.post("/log", authenticateToken, async (req, res) => {
+  const { sector, description, date, orderNumber } = req.body;
+
+  if (!sector || !description || !date || !orderNumber) {
+    return res.status(400).json({ error: "Todos os campos são obrigatórios" });
+  }
+
+  const { data, error } = await supabase
+    .from("Log_OS")
+    .insert([{ sector, description, date, orderNumber }])
+    .select();
+
+  if (error) {
+    console.error("Erro ao inserir log:", error);
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json({ message: "Log registrado com sucesso", log: data[0] });
+});
+
+// Deletar um log pelo ID
+app.delete("/log/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  const { error } = await supabase.from("Log_OS").delete().eq("id", id);
+
+  if (error) {
+    console.error("Erro ao deletar log:", error);
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json({ message: `Log ${id} deletado com sucesso` });
+});
+
+// Atualizar orderNumber nos log
+app.patch("/log/:orderNumber", authenticateToken, async (req, res) => {
+  const { orderNumber } = req.params; // orderNumber antigo
+  const { orderNumber: newOrderNumber } = req.body; // orderNumber novo
+
+  // Se veio string vazia → erro
+  if (newOrderNumber === "") {
+    return res.status(400).json({ error: "orderNumber não pode ser vazio" });
+  }
+
+  // Se não veio nada no body erro
+  if (newOrderNumber === undefined) {
+    return res.status(400).json({ error: "Novo orderNumber é obrigatório" });
+  }
+
+  // Se veio null permite atualizar para null
+  const { data, error } = await supabase
+    .from("Log_OS")
+    .update({ orderNumber: newOrderNumber })
+    .eq("orderNumber", orderNumber)
+    .select("*");
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({
+    message: "Logs atualizados com sucesso",
+    updatedLogs: data,
+  });
+});
+// pra formatar data bonitinho
+
+//Pausa todas as OS em produção às 17h
+cron.schedule("0 17 * * *", async () => {
+  console.log("Executando pausa automática de OS em produção...");
+
+  try {
+    //Buscar todas as OS que estão em produção
+    const { data: osEmProducao, error: erroBusca } = await supabase
+      .from("Ordens_Servico")
+      .select("*")
+      .eq("status", "Em produção");
+
+    if (erroBusca) throw new Error(erroBusca.message);
+
+    if (!osEmProducao || osEmProducao.length === 0) {
+      console.log("Nenhuma OS em produção no momento.");
+      return;
+    }
+
+    //Pausar todas
+    const { data: pausadas, error: erroPausa } = await supabase
+      .from("Ordens_Servico")
+      .update({ status: "Pausado" })
+      .eq("status", "Em produção")
+      .select("*");
+
+    if (erroPausa) throw new Error(erroPausa.message);
+
+    console.log(`${pausadas.length} OS pausadas automaticamente.`);
+
+    //Inserir log para cada OS pausada
+    const agora = dayjs().format("YYYY-MM-DD HH:mm:ss");
+
+    const logs = pausadas.map((os) => ({
+      orderNumber: os.orderNumber,
+      setor: os.setor || "Sistema",
+      usuario: "Sistema Automático",
+      acao: "Pausar Produção",
+      descricao: `Produção pausada automaticamente às 17h (${agora})`,
+      created_at: agora,
+    }));
+
+    const { error: erroLog } = await supabase.from("Log_OS").insert(logs);
+
+    if (erroLog) {
+      console.error("Erro ao registrar logs:", erroLog.message);
+    } else {
+      console.log("Logs de pausa registrados com sucesso.");
+    }
+  } catch (err) {
+    console.error("Erro no cron de pausa automática:", err.message);
+  }
 });
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
