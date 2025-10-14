@@ -261,11 +261,17 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
 
     const filtradas = data.filter((os) => {
-      const passouPorSetor = os.setoresConcluidos?.includes?.(setor);
-      const setorAtual = os.currentSector?.sector === setor;
-      const finalizada = os.status === "finalizado";
+      const setorAtual =
+        os.currentSector?.sector === setor || os.currentSector === setor;
 
-      return setorAtual || (finalizada && passouPorSetor);
+      // Verifica se o setor logado existe no roteiro da OS
+      const passouPorRoteiro =
+        Array.isArray(os.routing) && os.routing.some((r) => r.sector === setor);
+
+      const finalizada = os.status?.toLowerCase() === "finalizado";
+
+      // Mostra se está no setor ou se está finalizada mas passou pelo roteiro
+      return setorAtual || (finalizada && passouPorRoteiro);
     });
 
     res.json(filtradas);
