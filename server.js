@@ -523,7 +523,7 @@ cron.schedule("0 17 * * *", async () => {
       orderNumber: os.orderNumber,
       sector: "Sistema",
       description: `Produção pausada automaticamente às 17h (${agora})`,
-      date: agora,
+      date: new Date().getTime(),
     }));
 
     const { error: erroLog } = await supabase.from("Log_OS").insert(logs);
