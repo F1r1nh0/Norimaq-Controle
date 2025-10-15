@@ -88,7 +88,7 @@ app.post("/login", async (req, res) => {
     // Salva refresh token no banco
     await supabase.from("users").update({ refreshToken }).eq("id", user.id);
 
-    res.json({ accessToken, refreshToken, role: user.role, id: user.id });
+    res.json({ accessToken, refreshToken, role: user.role, role_id: user.sector_id });
   } catch (err) {
     console.error("Erro inesperado no login:", err.message);
     res.status(500).json({ error: "Erro interno no servidor" });
