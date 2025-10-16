@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import cron from "node-cron";
 import dayjs from "dayjs";
+import process from "process";
 
 dotenv.config();
 const app = express();
@@ -21,7 +22,6 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000", // local
-      "https://controle-norimaq.vercel.app", // produção
       "https://dev-controle-norimaq.vercel.app", // Dev
     ],
     methods: ["GET", "POST", "PATCH", "DELETE"],
@@ -89,7 +89,12 @@ app.post("/login", async (req, res) => {
     // Salva refresh token no banco
     await supabase.from("users").update({ refreshToken }).eq("id", user.id);
 
-    res.json({ accessToken, refreshToken, role: user.role, role_id: user.sector_id });
+    res.json({
+      accessToken,
+      refreshToken,
+      role: user.role,
+      role_id: user.sector_id,
+    });
   } catch (err) {
     console.error("Erro inesperado no login:", err.message);
     res.status(500).json({ error: "Erro interno no servidor" });
