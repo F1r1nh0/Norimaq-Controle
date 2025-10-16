@@ -10,7 +10,7 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -20,7 +20,7 @@ const supabase = createClient(
 app.use(
   cors({
     origin: [
-      "http://localhost:3000", // local
+      "http://localhost:4000", // local
       "https://dev-controle-norimaq.vercel.app", // Dev
     ],
     methods: ["GET", "POST", "PATCH", "DELETE"],
@@ -67,7 +67,7 @@ app.post("/login", async (req, res) => {
     // Verifica se o setor escolhido confere com o setor do usuário no banco
     if (selectedRole && selectedRole !== user.role) {
       return res.status(403).json({
-        error: `Credenciais inválidas`,
+        error: "Credenciais inválidas",
       });
     }
 
