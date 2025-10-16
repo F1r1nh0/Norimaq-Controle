@@ -10,7 +10,7 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 3000;
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -20,7 +20,7 @@ const supabase = createClient(
 app.use(
   cors({
     origin: [
-      "http://localhost:4000", // local
+      "http://localhost:3000", // local
       "https://dev-controle-norimaq.vercel.app", // Dev
     ],
     methods: ["GET", "POST", "PATCH", "DELETE"],
@@ -47,7 +47,7 @@ function authenticateToken(req, res, next) {
 }
 // Login
 app.post("/login", async (req, res) => {
-  const { username, password } = req.body; // <- adicionamos selectedRole
+  const { username, password, selectedRole } = req.body; // <- adicionamos selectedRole
 
   try {
     const { data: user, error } = await supabase
