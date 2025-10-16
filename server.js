@@ -29,6 +29,11 @@ app.use(
     credentials: true, // importante se for usar cookies
   })
 );
+
+console.log("Supabase URL:", process.env.SUPABASE_URL);
+console.log("Supabase KEY:", process.env.SUPABASE_KEY ? " set" : " missing");
+console.log("JWT SECRET:", process.env.JWT_SECRET ? " set" : " missing");
+
 // Middleware de autenticação
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
