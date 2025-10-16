@@ -47,7 +47,7 @@ function authenticateToken(req, res, next) {
 }
 // Login
 app.post("/login", async (req, res) => {
-  const { username, password, selectedRole } = req.body; // <- adicionamos selectedRole
+  const { username, password } = req.body; // <- adicionamos selectedRole
 
   try {
     const { data: user, error } = await supabase
@@ -57,11 +57,11 @@ app.post("/login", async (req, res) => {
       .single();
 
     if (error || !user) {
-      return res.status(400).json({ error: "Credenciais inválidas" });
+      return res.status(400).json({ error: "Credenciais inválidas USER" });
     }
 
     if (password !== user.password) {
-      return res.status(401).json({ error: "Credenciais inválidas" });
+      return res.status(401).json({ error: "Credenciais inválidas PASS" });
     }
 
     // Verifica se o setor escolhido confere com o setor do usuário no banco
