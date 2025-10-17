@@ -295,17 +295,66 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
 // Buscar OS específica pelo orderNumber
 app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
   const orderNumber = req.params.orderNumber;
+  const setorUsuario = req.user.role?.toUpperCase();
 
-  const { data, error } = await supabase
-    .from("Ordens_Servico")
-    .select("*")
-    .eq("orderNumber", orderNumber)
-    .single(); // pega apenas um registro
+  try {
+    const { data: os, error } = await supabase
+      .from("Ordens_Servico")
+      .select("*")
+      .eq("orderNumber", orderNumber)
+      .single();
 
-  if (error || !data)
-    return res.status(404).json({ error: "OS não encontrada" });
+    if (error || !os)
+      return res.status(404).json({ error: "OS não encontrada" });
 
-  res.json(data);
+    // Se for PCP ou ALMOXARIFADO, pode ver tudo
+    if (["PCP", "ALMOXARIFADO"].includes(setorUsuario)) {
+      return res.json(os);
+    }
+
+    // Verifica se o setor do usuário está no roteiro
+    const roteiro = Array.isArray(os.routing) ? os.routing : [];
+    const indexSetorUsuario = roteiro.findIndex(
+      (r) => r.sector?.toUpperCase() === setorUsuario
+    );
+
+    if (indexSetorUsuario === -1) {
+      // Setor não está no roteiro
+      return res.status(403).json({
+        error: "Seu setor não faz parte do roteiro desta OS.",
+      });
+    }
+
+    // Verifica o setor atual da OS
+    const setorAtual =
+      os.currentSector?.sector?.toUpperCase?.() ||
+      os.currentSector?.toUpperCase?.();
+
+    // Se o setor atual for o mesmo do usuário, ele pode ver normalmente
+    if (setorAtual === setorUsuario) {
+      return res.json(os);
+    }
+
+    // Se ainda não chegou a vez do setor
+    const indexSetorAtual = roteiro.findIndex(
+      (r) => r.sector?.toUpperCase() === setorAtual
+    );
+
+    if (indexSetorAtual < indexSetorUsuario) {
+      // A vez ainda não chegou (setores anteriores não finalizaram)
+      return res.status(403).json({
+        error: "Ainda não é a vez do seu setor iniciar esta OS.",
+      });
+    }
+
+    // Se chegou até aqui, significa que a OS já passou pelo setor
+    return res.status(403).json({
+      error: "Esta OS já passou pelo seu setor.",
+    });
+  } catch (err) {
+    console.error("Erro ao buscar OS:", err.message);
+    res.status(500).json({ error: "Erro interno ao buscar OS" });
+  }
 });
 
 // Setor registra produção
