@@ -252,7 +252,11 @@ app.patch("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
 
 // Listar todas as OS (somente PCP)
 app.get("/os", authenticateToken, async (req, res) => {
-  if (req.user.role !== "PCP" && req.user.role !== "ALMOXARIFADO") {
+  if (
+    req.user.role !== "PCP" &&
+    req.user.role !== "ALMOXARIFADO" &&
+    req.user.role !== "ADM"
+  ) {
     return res.status(403).json({ error: "Acesso negado" });
   }
 
