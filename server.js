@@ -304,8 +304,9 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
       .eq("orderNumber", orderNumber)
       .single();
 
-    if (error || !os)
+    if (error || !os) {
       return res.status(404).json({ error: "OS não encontrada" });
+    }
 
     // Se for PCP ou ALMOXARIFADO, pode ver tudo
     if (["PCP", "ALMOXARIFADO"].includes(setorUsuario)) {
@@ -335,25 +336,22 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
       return res.json(os);
     }
 
-    // Se ainda não chegou a vez do setor
+    // Se não for o setor atual, verifica se é a vez dele no roteiro
     const indexSetorAtual = roteiro.findIndex(
       (r) => r.sector?.toUpperCase() === setorAtual
     );
 
-    if (indexSetorAtual < indexSetorUsuario) {
-      // A vez ainda não chegou (setores anteriores não finalizaram)
+    if (indexSetorUsuario > indexSetorAtual) {
       return res.status(403).json({
-        error: "Ainda não é a vez do seu setor iniciar esta OS.",
+        error: "Ainda não é a vez do seu setor de iniciar esta OS.",
       });
     }
 
-    // Se chegou até aqui, significa que a OS já passou pelo setor
-    return res.status(403).json({
-      error: "Esta OS já passou pelo seu setor.",
-    });
+    // Se chegou até aqui, tudo ok
+    return res.json(os);
   } catch (err) {
     console.error("Erro ao buscar OS:", err.message);
-    res.status(500).json({ error: "Erro interno ao buscar OS" });
+    res.status(500).json({ error: "Erro interno ao buscar OS." });
   }
 });
 
