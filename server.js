@@ -268,6 +268,8 @@ app.get("/os", authenticateToken, async (req, res) => {
   res.json(data);
 });
 
+
+/*/ esse n presta mas to testando
 // Listar OS do setor correspondente ao usuário logado
 app.get("/os/setor", authenticateToken, async (req, res) => {
   const setor = req.user.role;
@@ -311,9 +313,9 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
     console.error("Erro ao listar OS por setor:", err.message);
     res.status(500).json({ error: "Erro interno ao listar OS" });
   }
-});
+}); /*/
 
-/*/ Listar OS do setor correspondente ao usuário logado
+//Listar OS do setor correspondente ao usuário logado
 app.get("/os/setor", authenticateToken, async (req, res) => {
   const setor = req.user.role;
 
@@ -341,7 +343,7 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Erro interno ao listar OS" });
   }
 });
-/*/
+
 // Buscar OS específica pelo orderNumber
 app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
   const orderNumber = req.params.orderNumber;
