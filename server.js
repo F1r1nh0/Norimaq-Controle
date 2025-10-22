@@ -335,9 +335,8 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
 
       // Mostra se está no setor ou se está finalizada mas passou pelo roteiro
       return setorAtual || (finalizada && passouPorRoteiro);
-    });
-
-     // se o setor for MONTAGEM
+      
+      // se o setor for MONTAGEM
       if (setor?.toUpperCase() === "MONTAGEM") {
         const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
         return (
@@ -352,6 +351,8 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
             ))
         );
       }
+    });
+
 
     res.json(filtradas);
   } catch (err) {
