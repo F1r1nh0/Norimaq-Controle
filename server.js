@@ -235,6 +235,7 @@ app.delete("/os/:orderNumber", authenticateToken, async (req, res) => {
 
   res.json({ message: `OS ${orderNumber} excluída com sucesso` });
 });
+
 // PCP finaliza OS (retirar)
 app.patch("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
   if (req.user.role !== "PCP")
@@ -367,6 +368,18 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
     const indexSetorUsuario = roteiro.findIndex(
       (r) => r.sector?.toUpperCase() === setorUsuario
     );
+
+    //se for MONTAGEM, pode ver também ELETRICA, MECANICA e TESTE
+    if (setorUsuario === "MONTAGEM") {
+      const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
+      const setorAtual =
+        os.currentSector?.sector?.toUpperCase?.() ||
+        os.currentSector?.toUpperCase?.();
+
+      if (setoresPermitidos.includes(setorAtual)) {
+        return res.json(os);
+      }
+    }
 
     if (indexSetorUsuario === -1) {
       // Setor não está no roteiro
