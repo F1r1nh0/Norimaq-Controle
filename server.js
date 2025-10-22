@@ -22,6 +22,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000", // local
+      "https://controle-norimaq.vercel.app", // Produção
       "https://dev-controle-norimaq.vercel.app", // Dev
     ],
     methods: ["GET", "POST", "PATCH", "DELETE"],
