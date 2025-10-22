@@ -325,11 +325,11 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
 
     const filtradas = data.filter((os) => {
+      const finalizada = os.status?.toLowerCase() === "finalizado";
       
         // se o setor for MONTAGEM
       if (setor?.toUpperCase() === "MONTAGEM") {
         const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
-        const finalizada = os.status?.toLowerCase() === "finalizado";
         return (
           setoresPermitidos.includes(
             os.currentSector?.sector?.toUpperCase?.()
