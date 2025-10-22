@@ -269,7 +269,7 @@ app.get("/os", authenticateToken, async (req, res) => {
 
 // Listar OS do setor correspondente ao usuário logado
 app.get("/os/setor", authenticateToken, async (req, res) => {
-  const setor = req.user.role?.toUpperCase();
+  const setor = req.user.role;
 
   try {
     const { data, error } = await supabase.from("Ordens_Servico").select("*");
@@ -277,34 +277,32 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
 
     const filtradas = data.filter((os) => {
       const setorAtual =
-        os.currentSector?.sector?.toUpperCase() === setor ||
-        os.currentSector?.toUpperCase() === setor;
+        os.currentSector?.sector === setor || os.currentSector === setor;
 
-      const roteiro = Array.isArray(os.routing) ? os.routing : [];
-      const passouPorRoteiro = roteiro.some(
-        (r) => r.sector?.toUpperCase() === setor
-      );
+      // Verifica se o setor logado existe no roteiro da OS
+      const passouPorRoteiro =
+        Array.isArray(os.routing) && os.routing.some((r) => r.sector === setor);
 
       const finalizada = os.status?.toLowerCase() === "finalizado";
 
-      //MONTAGEM pode ver OS dos setores ELETRICA, MECANICA e TESTE
-      const setoresPermitidosMontagem = ["ELETRICA", "MECANICA", "TESTE"];
-      const montagemPodeVer =
-        setor === "MONTAGEM" &&
-        (setoresPermitidosMontagem.includes(
-          os.currentSector?.sector?.toUpperCase?.() ||
-            os.currentSector?.toUpperCase?.()
-        ) ||
-          setoresPermitidosMontagem.some((s) =>
-            roteiro.some((r) => r.sector?.toUpperCase() === s)
-          ));
+      // se o setor for MONTAGEM
+      if (setor?.toUpperCase() === "MONTAGEM") {
+        const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
+        return (
+          setoresPermitidos.includes(
+            os.currentSector?.sector?.toUpperCase?.()
+          ) ||
+          setoresPermitidos.includes(os.currentSector?.toUpperCase?.()) ||
+          (finalizada &&
+            Array.isArray(os.routing) &&
+            os.routing.some((r) =>
+              setoresPermitidos.includes(r.sector?.toUpperCase?.())
+            ))
+        );
+      }
 
-      // Regra geral de exibição
-      return (
-        setorAtual || // Está no setor atual
-        (finalizada && passouPorRoteiro) || // Já passou pelo roteiro e foi finalizada
-        montagemPodeVer // Caso especial da montagem
-      );
+      // Comportamento padrão para os demais setores
+      return setorAtual || (finalizada && passouPorRoteiro);
     });
 
     res.json(filtradas);
