@@ -337,6 +337,22 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
       return setorAtual || (finalizada && passouPorRoteiro);
     });
 
+     // se o setor for MONTAGEM
+      if (setor?.toUpperCase() === "MONTAGEM") {
+        const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
+        return (
+          setoresPermitidos.includes(
+            os.currentSector?.sector?.toUpperCase?.()
+          ) ||
+          setoresPermitidos.includes(os.currentSector?.toUpperCase?.()) ||
+          (finalizada &&
+            Array.isArray(os.routing) &&
+            os.routing.some((r) =>
+              setoresPermitidos.includes(r.sector?.toUpperCase?.())
+            ))
+        );
+      }
+
     res.json(filtradas);
   } catch (err) {
     console.error("Erro ao listar OS por setor:", err.message);
