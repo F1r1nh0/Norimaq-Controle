@@ -51,6 +51,7 @@ function authenticateToken(req, res, next) {
     next();
   });
 }
+
 // Login
 app.post("/login", async (req, res) => {
   const { username, password, selectedRole } = req.body; // <- adicionamos selectedRole
@@ -81,7 +82,7 @@ app.post("/login", async (req, res) => {
     const accessToken = jwt.sign(
       { id: user.id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "15m" }
+      { expiresIn: "7d" }
     );
 
     // Refresh token - expira mais lento
@@ -94,11 +95,27 @@ app.post("/login", async (req, res) => {
     // Salva refresh token no banco
     await supabase.from("users").update({ refreshToken }).eq("id", user.id);
 
+    // Se for MONTAGEM, gerar tokens adicionais
+    let extraTokens = {};
+    if (user.role.toUpperCase() === "MONTAGEM") {
+      const setoresExtras = ["ELETRICA", "MECANICA", "TESTE"];
+
+      setoresExtras.forEach((setor) => {
+        const token = jwt.sign(
+          { id: user.id, role: setor },
+          process.env.JWT_SECRET,
+          { expiresIn: "7d" }
+        );
+        extraTokens[setor.toLowerCase()] = token;
+      });
+    }
+
     res.json({
       accessToken,
       refreshToken,
       role: user.role,
       role_id: user.sector_id,
+      extraTokens, // tokens dos outros setores
     });
   } catch (err) {
     console.error("Erro inesperado no login:", err.message);
