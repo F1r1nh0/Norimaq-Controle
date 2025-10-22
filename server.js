@@ -325,6 +325,23 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
 
     const filtradas = data.filter((os) => {
+      
+        // se o setor for MONTAGEM
+      if (setor?.toUpperCase() === "MONTAGEM") {
+        const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
+        return (
+          setoresPermitidos.includes(
+            os.currentSector?.sector?.toUpperCase?.()
+          ) ||
+          setoresPermitidos.includes(os.currentSector?.toUpperCase?.()) ||
+          (finalizada &&
+            Array.isArray(os.routing) &&
+            os.routing.some((r) =>
+              setoresPermitidos.includes(r.sector?.toUpperCase?.())
+            ))
+        );
+      }
+      
       const setorAtual =
         os.currentSector?.sector === setor || os.currentSector === setor;
 
