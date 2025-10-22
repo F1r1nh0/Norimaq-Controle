@@ -329,6 +329,7 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
         // se o setor for MONTAGEM
       if (setor?.toUpperCase() === "MONTAGEM") {
         const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
+        const finalizada = os.status?.toLowerCase() === "finalizado";
         return (
           setoresPermitidos.includes(
             os.currentSector?.sector?.toUpperCase?.()
@@ -348,8 +349,6 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
       // Verifica se o setor logado existe no roteiro da OS
       const passouPorRoteiro =
         Array.isArray(os.routing) && os.routing.some((r) => r.sector === setor);
-
-      const finalizada = os.status?.toLowerCase() === "finalizado";
 
       // Mostra se está no setor ou se está finalizada mas passou pelo roteiro
       return setorAtual || (finalizada && passouPorRoteiro);
