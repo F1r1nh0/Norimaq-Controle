@@ -63,11 +63,11 @@ app.post("/login", async (req, res) => {
       .single();
 
     if (error || !user) {
-      return res.status(400).json({ error: "Credenciais inválidas USER" });
+      return res.status(400).json({ error: "Credenciais inválidas" });
     }
 
     if (password !== user.password) {
-      return res.status(401).json({ error: "Credenciais inválidas PASS" });
+      return res.status(401).json({ error: "Credenciais inválidas" });
     }
 
     // Verifica se o setor escolhido confere com o setor do usuário no banco
@@ -81,7 +81,7 @@ app.post("/login", async (req, res) => {
     const accessToken = jwt.sign(
       { id: user.id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "15m" }
+      { expiresIn: "7d" }
     );
 
     // Refresh token - expira mais lento
@@ -255,7 +255,7 @@ app.get("/os", authenticateToken, async (req, res) => {
   if (
     req.user.role !== "PCP" &&
     req.user.role !== "ALMOXARIFADO" &&
-    req.user.role !== "ADM"
+    req.user.role !== "ADMIN"
   ) {
     return res.status(403).json({ error: "Acesso negado" });
   }
@@ -268,6 +268,53 @@ app.get("/os", authenticateToken, async (req, res) => {
 });
 
 // Listar OS do setor correspondente ao usuário logado
+app.get("/os/setor", authenticateToken, async (req, res) => {
+  const setor = req.user.role?.toUpperCase();
+
+  try {
+    const { data, error } = await supabase.from("Ordens_Servico").select("*");
+    if (error) return res.status(500).json({ error: error.message });
+
+    const filtradas = data.filter((os) => {
+      const setorAtual =
+        os.currentSector?.sector?.toUpperCase() === setor ||
+        os.currentSector?.toUpperCase() === setor;
+
+      const roteiro = Array.isArray(os.routing) ? os.routing : [];
+      const passouPorRoteiro = roteiro.some(
+        (r) => r.sector?.toUpperCase() === setor
+      );
+
+      const finalizada = os.status?.toLowerCase() === "finalizado";
+
+      //MONTAGEM pode ver OS dos setores ELETRICA, MECANICA e TESTE
+      const setoresPermitidosMontagem = ["ELETRICA", "MECANICA", "TESTE"];
+      const montagemPodeVer =
+        setor === "MONTAGEM" &&
+        (setoresPermitidosMontagem.includes(
+          os.currentSector?.sector?.toUpperCase?.() ||
+            os.currentSector?.toUpperCase?.()
+        ) ||
+          setoresPermitidosMontagem.some((s) =>
+            roteiro.some((r) => r.sector?.toUpperCase() === s)
+          ));
+
+      // Regra geral de exibição
+      return (
+        setorAtual || // Está no setor atual
+        (finalizada && passouPorRoteiro) || // Já passou pelo roteiro e foi finalizada
+        montagemPodeVer // Caso especial da montagem
+      );
+    });
+
+    res.json(filtradas);
+  } catch (err) {
+    console.error("Erro ao listar OS por setor:", err.message);
+    res.status(500).json({ error: "Erro interno ao listar OS" });
+  }
+});
+
+/*/ Listar OS do setor correspondente ao usuário logado
 app.get("/os/setor", authenticateToken, async (req, res) => {
   const setor = req.user.role;
 
@@ -295,7 +342,7 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Erro interno ao listar OS" });
   }
 });
-
+/*/
 // Buscar OS específica pelo orderNumber
 app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
   const orderNumber = req.params.orderNumber;
@@ -312,8 +359,8 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "OS não encontrada" });
     }
 
-    // Se for PCP ou ALMOXARIFADO, pode ver tudo
-    if (["PCP", "ALMOXARIFADO"].includes(setorUsuario)) {
+    // Se for PCP ou ALMOXARIFADO e ADMIN, pode ver tudo
+    if (["PCP", "ALMOXARIFADO, ADMIN"].includes(setorUsuario)) {
       return res.json(os);
     }
 
@@ -327,27 +374,6 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
       // Setor não está no roteiro
       return res.status(403).json({
         error: "Seu setor não faz parte do roteiro desta OS.",
-      });
-    }
-
-    // Verifica o setor atual da OS
-    const setorAtual =
-      os.currentSector?.sector?.toUpperCase?.() ||
-      os.currentSector?.toUpperCase?.();
-
-    // Se o setor atual for o mesmo do usuário, ele pode ver normalmente
-    if (setorAtual === setorUsuario) {
-      return res.json(os);
-    }
-
-    // Se não for o setor atual, verifica se é a vez dele no roteiro
-    const indexSetorAtual = roteiro.findIndex(
-      (r) => r.sector?.toUpperCase() === setorAtual
-    );
-
-    if (indexSetorUsuario > indexSetorAtual) {
-      return res.status(403).json({
-        error: "Ainda não é a vez do seu setor de iniciar esta OS.",
       });
     }
 
