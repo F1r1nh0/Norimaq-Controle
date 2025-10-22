@@ -131,7 +131,7 @@ app.post("/refresh", async (req, res) => {
     const newAccessToken = jwt.sign(
       { id: user.id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "15m" }
+      { expiresIn: "7d" }
     );
 
     res.json({ accessToken: newAccessToken });
@@ -380,7 +380,7 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
     }
 
     // Se for PCP ou ALMOXARIFADO e ADMIN, pode ver tudo
-    if (["PCP", "ALMOXARIFADO, ADMIN"].includes(setorUsuario)) {
+    if (["PCP", "ALMOXARIFADO" , "ADMIN"].includes(setorUsuario)) {
       return res.json(os);
     }
 
