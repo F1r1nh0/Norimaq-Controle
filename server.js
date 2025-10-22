@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import cron from "node-cron";
 import dayjs from "dayjs";
+import process from "process";
 
 dotenv.config();
 const app = express();
@@ -21,13 +22,18 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000", // local
-      "https://controle-norimaq.vercel.app", // produção
+      "https://dev-controle-norimaq.vercel.app", // Dev
     ],
     methods: ["GET", "POST", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true, // importante se for usar cookies
   })
 );
+
+console.log("Supabase URL:", process.env.SUPABASE_URL);
+console.log("Supabase KEY:", process.env.SUPABASE_KEY ? " set" : " missing");
+console.log("JWT SECRET:", process.env.JWT_SECRET ? " set" : " missing");
+
 // Middleware de autenticação
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
@@ -67,7 +73,7 @@ app.post("/login", async (req, res) => {
     // Verifica se o setor escolhido confere com o setor do usuário no banco
     if (selectedRole && selectedRole !== user.role) {
       return res.status(403).json({
-        error: `Credenciais inválidas`,
+        error: "Credenciais inválidas",
       });
     }
 
@@ -75,7 +81,7 @@ app.post("/login", async (req, res) => {
     const accessToken = jwt.sign(
       { id: user.id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "15m" }
+      { expiresIn: "7d" }
     );
 
     // Refresh token - expira mais lento
@@ -88,7 +94,12 @@ app.post("/login", async (req, res) => {
     // Salva refresh token no banco
     await supabase.from("users").update({ refreshToken }).eq("id", user.id);
 
-    res.json({ accessToken, refreshToken, role: user.role, role_id: user.sector_id });
+    res.json({
+      accessToken,
+      refreshToken,
+      role: user.role,
+      role_id: user.sector_id,
+    });
   } catch (err) {
     console.error("Erro inesperado no login:", err.message);
     res.status(500).json({ error: "Erro interno no servidor" });
@@ -120,7 +131,7 @@ app.post("/refresh", async (req, res) => {
     const newAccessToken = jwt.sign(
       { id: user.id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "15m" }
+      { expiresIn: "7d" }
     );
 
     res.json({ accessToken: newAccessToken });
@@ -224,6 +235,7 @@ app.delete("/os/:orderNumber", authenticateToken, async (req, res) => {
 
   res.json({ message: `OS ${orderNumber} excluída com sucesso` });
 });
+
 // PCP finaliza OS (retirar)
 app.patch("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
   if (req.user.role !== "PCP")
@@ -241,7 +253,11 @@ app.patch("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
 
 // Listar todas as OS (somente PCP)
 app.get("/os", authenticateToken, async (req, res) => {
-  if (req.user.role !== "PCP" && req.user.role !== "ALMOXARIFADO") {
+  if (
+    req.user.role !== "PCP" &&
+    req.user.role !== "ALMOXARIFADO" &&
+    req.user.role !== "ADMIN"
+  ) {
     return res.status(403).json({ error: "Acesso negado" });
   }
 
@@ -252,6 +268,8 @@ app.get("/os", authenticateToken, async (req, res) => {
   res.json(data);
 });
 
+
+/*/ esse n presta mas to testando
 // Listar OS do setor correspondente ao usuário logado
 app.get("/os/setor", authenticateToken, async (req, res) => {
   const setor = req.user.role;
@@ -270,9 +288,73 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
 
       const finalizada = os.status?.toLowerCase() === "finalizado";
 
-      // Mostra se está no setor ou se está finalizada mas passou pelo roteiro
+      // se o setor for MONTAGEM
+      if (setor?.toUpperCase() === "MONTAGEM") {
+        const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
+        return (
+          setoresPermitidos.includes(
+            os.currentSector?.sector?.toUpperCase?.()
+          ) ||
+          setoresPermitidos.includes(os.currentSector?.toUpperCase?.()) ||
+          (finalizada &&
+            Array.isArray(os.routing) &&
+            os.routing.some((r) =>
+              setoresPermitidos.includes(r.sector?.toUpperCase?.())
+            ))
+        );
+      }
+
+      // Comportamento padrão para os demais setores
       return setorAtual || (finalizada && passouPorRoteiro);
     });
+
+    res.json(filtradas);
+  } catch (err) {
+    console.error("Erro ao listar OS por setor:", err.message);
+    res.status(500).json({ error: "Erro interno ao listar OS" });
+  }
+}); /*/
+
+//Listar OS do setor correspondente ao usuário logado
+app.get("/os/setor", authenticateToken, async (req, res) => {
+  const setor = req.user.role;
+
+  try {
+    const { data, error } = await supabase.from("Ordens_Servico").select("*");
+    
+    if (error) return res.status(500).json({ error: error.message });
+
+    const filtradas = data.filter((os) => {
+      const finalizada = os.status?.toLowerCase() === "finalizado";
+      
+        // se o setor for MONTAGEM
+      if (setor?.toUpperCase() === "MONTAGEM") {
+        const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
+        return (
+          setoresPermitidos.includes(
+            os.currentSector?.sector?.toUpperCase?.()
+          ) ||
+          setoresPermitidos.includes(os.currentSector?.toUpperCase?.()) ||
+          (finalizada &&
+            Array.isArray(os.routing) &&
+            os.routing.some((r) =>
+              setoresPermitidos.includes(r.sector?.toUpperCase?.())
+            ))
+        );
+      }
+      
+      const setorAtual =
+        os.currentSector?.sector === setor || os.currentSector === setor;
+
+      // Verifica se o setor logado existe no roteiro da OS
+      const passouPorRoteiro =
+        Array.isArray(os.routing) && os.routing.some((r) => r.sector === setor);
+
+      // Mostra se está no setor ou se está finalizada mas passou pelo roteiro
+      return setorAtual || (finalizada && passouPorRoteiro);
+      
+    });
+
 
     res.json(filtradas);
   } catch (err) {
@@ -284,17 +366,55 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
 // Buscar OS específica pelo orderNumber
 app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
   const orderNumber = req.params.orderNumber;
+  const setorUsuario = req.user.role?.toUpperCase();
 
-  const { data, error } = await supabase
-    .from("Ordens_Servico")
-    .select("*")
-    .eq("orderNumber", orderNumber)
-    .single(); // pega apenas um registro
+  try {
+    const { data: os, error } = await supabase
+      .from("Ordens_Servico")
+      .select("*")
+      .eq("orderNumber", orderNumber)
+      .single();
 
-  if (error || !data)
-    return res.status(404).json({ error: "OS não encontrada" });
+    if (error || !os) {
+      return res.status(404).json({ error: "OS não encontrada" });
+    }
 
-  res.json(data);
+    // Se for PCP ou ALMOXARIFADO e ADMIN, pode ver tudo
+    if (["PCP", "ALMOXARIFADO" , "ADMIN"].includes(setorUsuario)) {
+      return res.json(os);
+    }
+
+    // Verifica se o setor do usuário está no roteiro
+    const roteiro = Array.isArray(os.routing) ? os.routing : [];
+    const indexSetorUsuario = roteiro.findIndex(
+      (r) => r.sector?.toUpperCase() === setorUsuario
+    );
+
+    //se for MONTAGEM, pode ver também ELETRICA, MECANICA e TESTE
+    if (setorUsuario === "MONTAGEM") {
+      const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
+      const setorAtual =
+        os.currentSector?.sector?.toUpperCase?.() ||
+        os.currentSector?.toUpperCase?.();
+
+      if (setoresPermitidos.includes(setorAtual)) {
+        return res.json(os);
+      }
+    }
+
+    if (indexSetorUsuario === -1) {
+      // Setor não está no roteiro
+      return res.status(403).json({
+        error: "Seu setor não faz parte do roteiro desta OS.",
+      });
+    }
+
+    // Se chegou até aqui, tudo ok
+    return res.json(os);
+  } catch (err) {
+    console.error("Erro ao buscar OS:", err.message);
+    res.status(500).json({ error: "Erro interno ao buscar OS." });
+  }
 });
 
 // Setor registra produção
