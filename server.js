@@ -321,6 +321,7 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
 
   try {
     const { data, error } = await supabase.from("Ordens_Servico").select("*");
+    
     if (error) return res.status(500).json({ error: error.message });
 
     const filtradas = data.filter((os) => {
@@ -336,21 +337,6 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
       // Mostra se está no setor ou se está finalizada mas passou pelo roteiro
       return setorAtual || (finalizada && passouPorRoteiro);
       
-      // se o setor for MONTAGEM
-      if (setor?.toUpperCase() === "MONTAGEM") {
-        const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
-        return (
-          setoresPermitidos.includes(
-            os.currentSector?.sector?.toUpperCase?.()
-          ) ||
-          setoresPermitidos.includes(os.currentSector?.toUpperCase?.()) ||
-          (finalizada &&
-            Array.isArray(os.routing) &&
-            os.routing.some((r) =>
-              setoresPermitidos.includes(r.sector?.toUpperCase?.())
-            ))
-        );
-      }
     });
 
 
