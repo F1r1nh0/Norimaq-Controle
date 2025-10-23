@@ -567,8 +567,89 @@ app.patch("/os/:orderNumber/validar", authenticateToken, async (req, res) => {
     os: updated,
   });
 });
+// Todos os logs (com paginação)
+app.get("/log", authenticateToken, async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const start = (page - 1) * limit;
+  const end = start + limit - 1;
 
-// Todos os logs
+  try {
+    const { data, error } = await supabase
+      .from("Log_OS")
+      .select("*")
+      .order("date", { ascending: false })
+      .range(start, end);
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    // Total de registros
+    const { count, error: countError } = await supabase
+      .from("Log_OS")
+      .select("*", { count: "exact", head: true });
+
+    if (countError) return res.status(500).json({ error: countError.message });
+
+    res.json({
+      page,
+      total: count,
+      totalPages: Math.ceil(count / limit),
+      nextPage: page * limit < count ? page + 1 : null,
+      previousPage: page > 1 ? page - 1 : null,
+      data,
+    });
+  } catch (err) {
+    console.error("Erro ao listar logs:", err.message);
+    res.status(500).json({ error: "Erro interno ao listar logs" });
+  }
+});
+
+// Logs de uma OS específica (com paginação)
+app.get("/log/:orderNumber", authenticateToken, async (req, res) => {
+  const { orderNumber } = req.params;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const start = (page - 1) * limit;
+  const end = start + limit - 1;
+
+  try {
+    const { data, error } = await supabase
+      .from("Log_OS")
+      .select("*")
+      .eq("orderNumber", orderNumber)
+      .order("date", { ascending: false })
+      .range(start, end);
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    // Total de registros filtrados
+    const { count, error: countError } = await supabase
+      .from("Log_OS")
+      .select("*", { count: "exact", head: true })
+      .eq("orderNumber", orderNumber);
+
+    if (countError) return res.status(500).json({ error: countError.message });
+
+    res.json({
+      orderNumber,
+      page,
+      total: count,
+      totalPages: Math.ceil(count / limit),
+      nextPage: page * limit < count ? page + 1 : null,
+      previousPage: page > 1 ? page - 1 : null,
+      data,
+    });
+  } catch (err) {
+    console.error("Erro ao listar logs da OS:", err.message);
+    res.status(500).json({ error: "Erro interno ao listar logs da OS" });
+  }
+});
+
+
+
+/*/
+teste logs antigo
+Todos os logs
 app.get("/log", authenticateToken, async (req, res) => {
   const { data, error } = await supabase
     .from("Log_OS")
@@ -591,6 +672,7 @@ app.get("/log/:orderNumber", authenticateToken, async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
+/*/
 
 // Criar um log (qualquer setor pode registrar uma ação)
 app.post("/log", authenticateToken, async (req, res) => {
