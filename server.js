@@ -269,33 +269,28 @@ app.get("/os", authenticateToken, async (req, res) => {
   res.json(data);
 });
 
-
-/*/ esse n presta mas to testando
 // Listar OS do setor correspondente ao usuário logado
 app.get("/os/setor", authenticateToken, async (req, res) => {
-  const setor = req.user.role;
+  const setor = req.user.role?.toUpperCase();
+
+  // Paginação
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const start = (page - 1) * limit;
+  const end = start + limit - 1;
 
   try {
     const { data, error } = await supabase.from("Ordens_Servico").select("*");
     if (error) return res.status(500).json({ error: error.message });
 
     const filtradas = data.filter((os) => {
-      const setorAtual =
-        os.currentSector?.sector === setor || os.currentSector === setor;
-
-      // Verifica se o setor logado existe no roteiro da OS
-      const passouPorRoteiro =
-        Array.isArray(os.routing) && os.routing.some((r) => r.sector === setor);
-
       const finalizada = os.status?.toLowerCase() === "finalizado";
 
-      // se o setor for MONTAGEM
-      if (setor?.toUpperCase() === "MONTAGEM") {
+      // Se o setor for MONTAGEM, pode ver ELETRICA, MECANICA, TESTE e MONTAGEM
+      if (setor === "MONTAGEM") {
         const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
         return (
-          setoresPermitidos.includes(
-            os.currentSector?.sector?.toUpperCase?.()
-          ) ||
+          setoresPermitidos.includes(os.currentSector?.sector?.toUpperCase?.()) ||
           setoresPermitidos.includes(os.currentSector?.toUpperCase?.()) ||
           (finalizada &&
             Array.isArray(os.routing) &&
@@ -305,18 +300,37 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
         );
       }
 
-      // Comportamento padrão para os demais setores
+      const setorAtual =
+        os.currentSector?.sector?.toUpperCase?.() === setor ||
+        os.currentSector?.toUpperCase?.() === setor;
+
+      const passouPorRoteiro =
+        Array.isArray(os.routing) &&
+        os.routing.some((r) => r.sector?.toUpperCase?.() === setor);
+
       return setorAtual || (finalizada && passouPorRoteiro);
     });
 
-    res.json(filtradas);
+    // Paginação manual
+    const total = filtradas.length;
+    const paginadas = filtradas.slice(start, end + 1);
+
+    res.json({
+      page,
+      total,
+      totalPages: Math.ceil(total / limit),
+      data: paginadas,
+    });
   } catch (err) {
     console.error("Erro ao listar OS por setor:", err.message);
     res.status(500).json({ error: "Erro interno ao listar OS" });
   }
-}); /*/
+});
 
-//Listar OS do setor correspondente ao usuário logado
+
+/*/
+funciona mas ta errado
+Listar OS do setor correspondente ao usuário logado
 app.get("/os/setor", authenticateToken, async (req, res) => {
   const setor = req.user.role;
   
@@ -378,6 +392,8 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Erro interno ao listar OS" });
   }
 });
+/*/
+
 
 // Buscar OS específica pelo orderNumber
 app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
