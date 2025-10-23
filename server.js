@@ -272,7 +272,7 @@ app.get("/os", authenticateToken, async (req, res) => {
 // Listar OS do setor correspondente ao usuário logado
 app.get("/os/setor", authenticateToken, async (req, res) => {
   const setor = req.user.role?.toUpperCase();
-
+  
   // Paginação
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
@@ -280,7 +280,10 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
   const end = start + limit - 1;
 
   try {
-    const { data, error } = await supabase.from("Ordens_Servico").select("*");
+    const { data, error } = await supabase
+  .from("Ordens_Servico")
+  .select("*")
+  .range(start, end);
     if (error) return res.status(500).json({ error: error.message });
 
     const filtradas = data.filter((os) => {
