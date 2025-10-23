@@ -319,6 +319,13 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
 //Listar OS do setor correspondente ao usuário logado
 app.get("/os/setor", authenticateToken, async (req, res) => {
   const setor = req.user.role;
+  
+  // Paginação
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const start = (page - 1) * limit;
+  const end = start + limit - 1;
+  
 
   try {
     const { data, error } = await supabase.from("Ordens_Servico").select("*");
@@ -355,9 +362,17 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
       return setorAtual || (finalizada && passouPorRoteiro);
       
     });
+    
+       // Paginação manual
+    const total = filtradas.length;
+    const paginadas = filtradas.slice(start, end + 1);
 
-
-    res.json(filtradas);
+    res.json(
+      page,
+      total,
+      totalPages: Math.ceil(total / limit),
+      data: paginadas,
+    });
   } catch (err) {
     console.error("Erro ao listar OS por setor:", err.message);
     res.status(500).json({ error: "Erro interno ao listar OS" });
