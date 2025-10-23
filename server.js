@@ -252,7 +252,55 @@ app.patch("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
   res.json({ message: "OS finalizada com sucesso" });
 });
 
-// Listar todas as OS (somente PCP)
+// Listar todas as OS (somente PCP, ALMOXARIFADO e ADMIN) com paginação
+app.get("/os", authenticateToken, async (req, res) => {
+  if (
+    req.user.role !== "PCP" &&
+    req.user.role !== "ALMOXARIFADO" &&
+    req.user.role !== "ADMIN"
+  ) {
+    return res.status(403).json({ error: "Acesso negado" });
+  }
+
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const start = (page - 1) * limit;
+  const end = start + limit - 1;
+
+  try {
+    const { data, error } = await supabase
+      .from("Ordens_Servico")
+      .select("*")
+      .order("created_at", { ascending: false }) // ordena por data de criação, pode mudar se quiser
+      .range(start, end);
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    // Pega o total de registros
+    const { count, error: countError } = await supabase
+      .from("Ordens_Servico")
+      .select("*", { count: "exact", head: true });
+
+    if (countError) return res.status(500).json({ error: countError.message });
+
+    res.json({
+      page,
+      total: count,
+      totalPages: Math.ceil(count / limit),
+      nextPage: page * limit < count ? page + 1 : null,
+      previousPage: page > 1 ? page - 1 : null,
+      data,
+    });
+  } catch (err) {
+    console.error("Erro ao listar todas as OS:", err.message);
+    res.status(500).json({ error: "Erro interno ao listar OS" });
+  }
+});
+
+
+/*/
+teste listar os antigo
+Listar todas as OS (somente PCP)
 app.get("/os", authenticateToken, async (req, res) => {
   if (
     req.user.role !== "PCP" &&
@@ -268,7 +316,7 @@ app.get("/os", authenticateToken, async (req, res) => {
 
   res.json(data);
 });
-
+/*/
 app.get("/os/setor", authenticateToken, async (req, res) => {
   const setor = req.user.role?.toUpperCase();
 
