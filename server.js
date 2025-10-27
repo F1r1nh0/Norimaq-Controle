@@ -268,26 +268,22 @@ app.get("/os", authenticateToken, async (req, res) => {
   const end = start + limit - 1;
 
   try {
-    const { data, error } = await supabase
+    // Busca as OS paginadas
+    const { data, error, count } = await supabase
       .from("Ordens_Servico")
-      .select("*")
-      .order("created_at", { ascending: false }) // ordena por data de criação, pode mudar se quiser
+      .select("*", { count: "exact" }) // <- aqui agora pega também o count real
+      .order("created_at", { ascending: false })
       .range(start, end);
 
     if (error) return res.status(500).json({ error: error.message });
 
-    // Pega o total de registros
-    const { count, error: countError } = await supabase
-      .from("Ordens_Servico")
-      .select("*", { count: "exact", head: true });
-
-    if (countError) return res.status(500).json({ error: countError.message });
+    const total = count || 0;
 
     res.json({
       page,
-      total: count,
-      totalPages: Math.ceil(count / limit),
-      nextPage: page * limit < count ? page + 1 : null,
+      total,
+      totalPages: Math.ceil(total / limit),
+      nextPage: page * limit < total ? page + 1 : null,
       previousPage: page > 1 ? page - 1 : null,
       data,
     });
@@ -788,7 +784,7 @@ app.patch("/log/:orderNumber", authenticateToken, async (req, res) => {
 });
 
 //Pausa todas as OS em produção às 17h
-cron.schedule("* 20 * * *", async () => {
+cron.schedule("0 17 * * *", async () => {
   console.log("Executando pausa automática de OS em produção...");
 
   try {
@@ -824,7 +820,7 @@ cron.schedule("* 20 * * *", async () => {
       sector: "Sistema",
       description: `Produção pausada automaticamente às 17h`,
       date: new Date().getTime(),
-    }));
+    },  {timezone: "America/Sao_Paulo"} ));
 
     const { error: erroLog } = await supabase.from("Log_OS").insert(logs);
 
