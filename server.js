@@ -274,7 +274,7 @@ app.get("/os", authenticateToken, async (req, res) => {
     const { data, error, count } = await supabase
       .from("Ordens_Servico")
       .select("*", { count: "exact" }) // <- aqui agora pega também o count real
-      .order("created_at", { ascending: false })
+      .order("createdAt", { ascending: false })
       .range(start, end);
 
     if (error) return res.status(500).json({ error: error.message });
