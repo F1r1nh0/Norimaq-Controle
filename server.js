@@ -175,6 +175,7 @@ app.post("/os", authenticateToken, async (req, res) => {
     currentSector,
     routing,
     progressDetails,
+    image,
   } = req.body;
 
   const { error } = await supabase.from("Ordens_Servico").insert([
@@ -190,6 +191,7 @@ app.post("/os", authenticateToken, async (req, res) => {
       currentSector,
       routing,
       progressDetails,
+      image,
     },
   ]);
 
