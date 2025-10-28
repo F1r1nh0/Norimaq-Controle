@@ -313,6 +313,8 @@ app.get("/os", authenticateToken, async (req, res) => {
   res.json(data);
 });
 /*/
+
+//OS por setor
 app.get("/os/setor", authenticateToken, async (req, res) => {
   const setor = req.user.role?.toUpperCase();
 
@@ -320,20 +322,21 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
   const start = (page - 1) * limit;
-  const end = start + limit - 1;
+  const end = start + limit;
 
   try {
+    // Busca todas as OS (sem range)
     const { data, error } = await supabase
       .from("Ordens_Servico")
       .select("*")
-      .range(start, end);
+      .order("created_at", { ascending: false });
 
     if (error) return res.status(500).json({ error: error.message });
 
+    // Filtra conforme o setor logado
     const filtradas = data.filter((os) => {
       const finalizada = os.status?.toLowerCase() === "finalizado";
 
-      // Se o setor for MONTAGEM, pode ver ELETRICA, MECANICA, TESTE e MONTAGEM
       if (setor === "MONTAGEM") {
         const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
         return (
@@ -358,12 +361,11 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
       return setorAtual || (finalizada && passouPorRoteiro);
     });
 
-    // Paginação manual
+    //Paginação manual após filtrar
     const total = filtradas.length;
     const totalPages = Math.ceil(total / limit);
-    const paginadas = filtradas.slice(start, end + 1);
+    const paginadas = filtradas.slice(start, end);
 
-    // Cálculo das páginas anterior e próxima
     const previousPage = page > 1 ? page - 1 : null;
     const nextPage = page < totalPages ? page + 1 : null;
 
@@ -381,8 +383,6 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Erro interno ao listar OS" });
   }
 });
-
-
 
 /*/
 funciona mas ta errado
