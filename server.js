@@ -22,7 +22,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000", // local
-       "https://controle-norimaq.vercel.app", // produção
+      "https://controle-norimaq.vercel.app", // Produção
       "https://dev-controle-norimaq.vercel.app", // Dev
     ],
     methods: ["GET", "POST", "PATCH", "DELETE"],
@@ -175,6 +175,7 @@ app.post("/os", authenticateToken, async (req, res) => {
     currentSector,
     routing,
     progressDetails,
+    image,
   } = req.body;
 
   const { error } = await supabase.from("Ordens_Servico").insert([
@@ -190,6 +191,7 @@ app.post("/os", authenticateToken, async (req, res) => {
       currentSector,
       routing,
       progressDetails,
+      image,
     },
   ]);
 
@@ -252,7 +254,51 @@ app.patch("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
   res.json({ message: "OS finalizada com sucesso" });
 });
 
-// Listar todas as OS (somente PCP)
+// Listar todas as OS (somente PCP, ALMOXARIFADO e ADMIN) com paginação
+app.get("/os", authenticateToken, async (req, res) => {
+  if (
+    req.user.role !== "PCP" &&
+    req.user.role !== "ALMOXARIFADO" &&
+    req.user.role !== "ADMIN"
+  ) {
+    return res.status(403).json({ error: "Acesso negado" });
+  }
+
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const start = (page - 1) * limit;
+  const end = start + limit - 1;
+
+  try {
+    // Busca as OS paginadas
+    const { data, error, count } = await supabase
+      .from("Ordens_Servico")
+      .select("*", { count: "exact" }) // <- aqui agora pega também o count real
+      .order("createdAt", { ascending: false })
+      .range(start, end);
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const total = count || 0;
+
+    res.json({
+      page,
+      total,
+      totalPages: Math.ceil(total / limit),
+      nextPage: page * limit < total ? page + 1 : null,
+      previousPage: page > 1 ? page - 1 : null,
+      data,
+    });
+  } catch (err) {
+    console.error("Erro ao listar todas as OS:", err.message);
+    res.status(500).json({ error: "Erro interno ao listar OS" });
+  }
+});
+
+
+/*/
+teste listar os antigo
+Listar todas as OS (somente PCP)
 app.get("/os", authenticateToken, async (req, res) => {
   if (
     req.user.role !== "PCP" &&
@@ -268,34 +314,35 @@ app.get("/os", authenticateToken, async (req, res) => {
 
   res.json(data);
 });
+/*/
 
-
-/*/ esse n presta mas to testando
-// Listar OS do setor correspondente ao usuário logado
+//OS por setor
 app.get("/os/setor", authenticateToken, async (req, res) => {
-  const setor = req.user.role;
+  const setor = req.user.role?.toUpperCase();
+
+  // Paginação
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const start = (page - 1) * limit;
+  const end = start + limit;
 
   try {
-    const { data, error } = await supabase.from("Ordens_Servico").select("*");
+    // Busca todas as OS (sem range)
+    const { data, error } = await supabase
+      .from("Ordens_Servico")
+      .select("*")
+      .order("created_at", { ascending: false });
+
     if (error) return res.status(500).json({ error: error.message });
 
+    // Filtra conforme o setor logado
     const filtradas = data.filter((os) => {
-      const setorAtual =
-        os.currentSector?.sector === setor || os.currentSector === setor;
-
-      // Verifica se o setor logado existe no roteiro da OS
-      const passouPorRoteiro =
-        Array.isArray(os.routing) && os.routing.some((r) => r.sector === setor);
-
       const finalizada = os.status?.toLowerCase() === "finalizado";
 
-      // se o setor for MONTAGEM
-      if (setor?.toUpperCase() === "MONTAGEM") {
+      if (setor === "MONTAGEM") {
         const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
         return (
-          setoresPermitidos.includes(
-            os.currentSector?.sector?.toUpperCase?.()
-          ) ||
+          setoresPermitidos.includes(os.currentSector?.sector?.toUpperCase?.()) ||
           setoresPermitidos.includes(os.currentSector?.toUpperCase?.()) ||
           (finalizada &&
             Array.isArray(os.routing) &&
@@ -305,20 +352,52 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
         );
       }
 
-      // Comportamento padrão para os demais setores
+      const setorAtual =
+        os.currentSector?.sector?.toUpperCase?.() === setor ||
+        os.currentSector?.toUpperCase?.() === setor;
+
+      const passouPorRoteiro =
+        Array.isArray(os.routing) &&
+        os.routing.some((r) => r.sector?.toUpperCase?.() === setor);
+
       return setorAtual || (finalizada && passouPorRoteiro);
     });
 
-    res.json(filtradas);
+    //Paginação manual após filtrar
+    const total = filtradas.length;
+    const totalPages = Math.ceil(total / limit);
+    const paginadas = filtradas.slice(start, end);
+
+    const previousPage = page > 1 ? page - 1 : null;
+    const nextPage = page < totalPages ? page + 1 : null;
+
+    res.json({
+      page,
+      limit,
+      total,
+      totalPages,
+      previousPage,
+      nextPage,
+      data: paginadas,
+    });
   } catch (err) {
     console.error("Erro ao listar OS por setor:", err.message);
     res.status(500).json({ error: "Erro interno ao listar OS" });
   }
-}); /*/
+});
 
-//Listar OS do setor correspondente ao usuário logado
+/*/
+funciona mas ta errado
+Listar OS do setor correspondente ao usuário logado
 app.get("/os/setor", authenticateToken, async (req, res) => {
   const setor = req.user.role;
+  
+  // Paginação
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const start = (page - 1) * limit;
+  const end = start + limit - 1;
+  
 
   try {
     const { data, error } = await supabase.from("Ordens_Servico").select("*");
@@ -355,14 +434,24 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
       return setorAtual || (finalizada && passouPorRoteiro);
       
     });
+    
+       // Paginação manual
+    const total = filtradas.length;
+    const paginadas = filtradas.slice(start, end + 1);
 
-
-    res.json(filtradas);
+    res.json(
+      page,
+      total,
+      totalPages: Math.ceil(total / limit),
+      data: paginadas,
+    });
   } catch (err) {
     console.error("Erro ao listar OS por setor:", err.message);
     res.status(500).json({ error: "Erro interno ao listar OS" });
   }
 });
+/*/
+
 
 // Buscar OS específica pelo orderNumber
 app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
@@ -524,8 +613,89 @@ app.patch("/os/:orderNumber/validar", authenticateToken, async (req, res) => {
     os: updated,
   });
 });
+// Todos os logs (com paginação)
+app.get("/log", authenticateToken, async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const start = (page - 1) * limit;
+  const end = start + limit - 1;
 
-// Todos os logs
+  try {
+    const { data, error } = await supabase
+      .from("Log_OS")
+      .select("*")
+      .order("date", { ascending: false })
+      .range(start, end);
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    // Total de registros
+    const { count, error: countError } = await supabase
+      .from("Log_OS")
+      .select("*", { count: "exact", head: true });
+
+    if (countError) return res.status(500).json({ error: countError.message });
+
+    res.json({
+      page,
+      total: count,
+      totalPages: Math.ceil(count / limit),
+      nextPage: page * limit < count ? page + 1 : null,
+      previousPage: page > 1 ? page - 1 : null,
+      data,
+    });
+  } catch (err) {
+    console.error("Erro ao listar logs:", err.message);
+    res.status(500).json({ error: "Erro interno ao listar logs" });
+  }
+});
+
+// Logs de uma OS específica (com paginação)
+app.get("/log/:orderNumber", authenticateToken, async (req, res) => {
+  const { orderNumber } = req.params;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const start = (page - 1) * limit;
+  const end = start + limit - 1;
+
+  try {
+    const { data, error } = await supabase
+      .from("Log_OS")
+      .select("*")
+      .eq("orderNumber", orderNumber)
+      .order("date", { ascending: false })
+      .range(start, end);
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    // Total de registros filtrados
+    const { count, error: countError } = await supabase
+      .from("Log_OS")
+      .select("*", { count: "exact", head: true })
+      .eq("orderNumber", orderNumber);
+
+    if (countError) return res.status(500).json({ error: countError.message });
+
+    res.json({
+      orderNumber,
+      page,
+      total: count,
+      totalPages: Math.ceil(count / limit),
+      nextPage: page * limit < count ? page + 1 : null,
+      previousPage: page > 1 ? page - 1 : null,
+      data,
+    });
+  } catch (err) {
+    console.error("Erro ao listar logs da OS:", err.message);
+    res.status(500).json({ error: "Erro interno ao listar logs da OS" });
+  }
+});
+
+
+
+/*/
+teste logs antigo
+Todos os logs
 app.get("/log", authenticateToken, async (req, res) => {
   const { data, error } = await supabase
     .from("Log_OS")
@@ -548,6 +718,7 @@ app.get("/log/:orderNumber", authenticateToken, async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
+/*/
 
 // Criar um log (qualquer setor pode registrar uma ação)
 app.post("/log", authenticateToken, async (req, res) => {
@@ -615,7 +786,69 @@ app.patch("/log/:orderNumber", authenticateToken, async (req, res) => {
 });
 
 //Pausa todas as OS em produção às 17h
-cron.schedule("* 20 * * *", async () => {
+
+cron.schedule(
+  "0 12,17 * * *", // roda às 12h e 17h todos os dias
+  async () => {
+    console.log("Executando pausa automática de OS em produção...");
+
+    try {
+      // Buscar todas as OS que estão em produção
+      const { data: osEmProducao, error: erroBusca } = await supabase
+        .from("Ordens_Servico")
+        .select("*")
+        .eq("status", "Em produção");
+
+      if (erroBusca) throw new Error(erroBusca.message);
+
+      if (!osEmProducao?.length) {
+        console.log("Nenhuma OS em produção no momento.");
+        return;
+      }
+
+      // Pausar todas
+      const { data: pausadas, error: erroPausa } = await supabase
+        .from("Ordens_Servico")
+        .update({ status: "Pausada" })
+        .eq("status", "Em produção")
+        .select("*");
+
+      if (erroPausa) throw new Error(erroPausa.message);
+
+      console.log(`${pausadas.length} OS pausadas automaticamente.`);
+
+      // Inserir log para cada OS pausada
+      const agora = dayjs()
+        .tz("America/Sao_Paulo")
+        .format("YYYY-MM-DD HH:mm:ss");
+
+      const logs = pausadas.map((os) => ({
+        orderNumber: os.orderNumber,
+        sector: "Sistema",
+        description: `Produção pausada automaticamente às ${agora}`,
+        date: new Date().getTime(),
+      }));
+
+      const { error: erroLog } = await supabase.from("Log_OS").insert(logs);
+
+      if (erroLog) {
+        console.error("Erro ao registrar logs:", erroLog.message);
+      } else {
+        console.log("Logs de pausa registrados com sucesso.");
+      }
+    } catch (err) {
+      console.error("Erro no cron de pausa automática:", err.message);
+    }
+  },
+  {
+    timezone: "America/Sao_Paulo",
+  }
+);
+
+
+/*/
+//Pausa todas as OS em produção às 17h
+cron.schedule("0 17 * * *", async () => {
   console.log("Executando pausa automática de OS em produção...");
 
   try {
@@ -651,7 +884,7 @@ cron.schedule("* 20 * * *", async () => {
       sector: "Sistema",
       description: `Produção pausada automaticamente às 17h`,
       date: new Date().getTime(),
-    }));
+    },  {timezone: "America/Sao_Paulo"} ));
 
     const { error: erroLog } = await supabase.from("Log_OS").insert(logs);
 
@@ -663,6 +896,6 @@ cron.schedule("* 20 * * *", async () => {
   } catch (err) {
     console.error("Erro no cron de pausa automática:", err.message);
   }
-});
+}); /*/
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
