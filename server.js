@@ -331,7 +331,7 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
     const { data, error } = await supabase
       .from("Ordens_Servico")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("createdAt", { ascending: false });
 
     if (error) return res.status(500).json({ error: error.message });
 
