@@ -786,6 +786,68 @@ app.patch("/log/:orderNumber", authenticateToken, async (req, res) => {
 });
 
 //Pausa todas as OS em produção às 17h
+
+cron.schedule(
+  "0 12,17 * * *", // roda às 12h e 17h todos os dias
+  async () => {
+    console.log("Executando pausa automática de OS em produção...");
+
+    try {
+      // Buscar todas as OS que estão em produção
+      const { data: osEmProducao, error: erroBusca } = await supabase
+        .from("Ordens_Servico")
+        .select("*")
+        .eq("status", "Em produção");
+
+      if (erroBusca) throw new Error(erroBusca.message);
+
+      if (!osEmProducao?.length) {
+        console.log("Nenhuma OS em produção no momento.");
+        return;
+      }
+
+      // Pausar todas
+      const { data: pausadas, error: erroPausa } = await supabase
+        .from("Ordens_Servico")
+        .update({ status: "Pausada" })
+        .eq("status", "Em produção")
+        .select("*");
+
+      if (erroPausa) throw new Error(erroPausa.message);
+
+      console.log(`${pausadas.length} OS pausadas automaticamente.`);
+
+      // Inserir log para cada OS pausada
+      const agora = dayjs()
+        .tz("America/Sao_Paulo")
+        .format("YYYY-MM-DD HH:mm:ss");
+
+      const logs = pausadas.map((os) => ({
+        orderNumber: os.orderNumber,
+        sector: "Sistema",
+        description: `Produção pausada automaticamente às ${agora}`,
+        date: new Date().getTime(),
+      }));
+
+      const { error: erroLog } = await supabase.from("Log_OS").insert(logs);
+
+      if (erroLog) {
+        console.error("Erro ao registrar logs:", erroLog.message);
+      } else {
+        console.log("Logs de pausa registrados com sucesso.");
+      }
+    } catch (err) {
+      console.error("Erro no cron de pausa automática:", err.message);
+    }
+  },
+  {
+    timezone: "America/Sao_Paulo",
+  }
+);
+
+
+/*/
+//Pausa todas as OS em produção às 17h
 cron.schedule("0 17 * * *", async () => {
   console.log("Executando pausa automática de OS em produção...");
 
@@ -834,6 +896,6 @@ cron.schedule("0 17 * * *", async () => {
   } catch (err) {
     console.error("Erro no cron de pausa automática:", err.message);
   }
-});
+}); /*/
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
