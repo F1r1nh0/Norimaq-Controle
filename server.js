@@ -254,7 +254,94 @@ app.patch("/os/:orderNumber/finalizar", authenticateToken, async (req, res) => {
   res.json({ message: "OS finalizada com sucesso" });
 });
 
-// Listar todas as OS (somente PCP, ALMOXARIFADO e ADMIN) com paginação
+// Listar todas as OS (PCP, ALMOXARIFADO e ADMIN) com filtros e paginação NOVO
+app.get("/os", authenticateToken, async (req, res) => {
+  if (
+    req.user.role !== "PCP" &&
+    req.user.role !== "ALMOXARIFADO" &&
+    req.user.role !== "ADMIN"
+  ) {
+    return res.status(403).json({ error: "Acesso negado" });
+  }
+
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const start = (page - 1) * limit;
+  const end = start + limit - 1;
+
+  const {
+    search,
+    status,
+    currentSector,
+    priority,
+    sort, // Ex: createdAt-desc
+  } = req.query;
+
+  try {
+    let query = supabase
+      .from("Ordens_Servico")
+      .select("*", { count: "exact" });
+
+    // Filtro de busca
+    if (search && search.trim() !== "") {
+      const termo = `%${search.toLowerCase()}%`;
+      query = query.or(
+        `orderNumber.ilike.${termo},partName.ilike.${termo},partNumber.ilike.${termo},note.ilike.${termo},currentSector->>sector.ilike.${termo},operatorName.ilike.${termo}`
+      );
+    }
+
+    // Filtros específicos
+    if (status) {
+      const statuses = status.split(","); // permite múltiplos
+      query = query.in("status", statuses);
+    }
+
+    if (currentSector) {
+      const sectors = currentSector.split(",");
+      query = query.or(
+        sectors.map((s) => `currentSector->>sector.ilike.%${s}%`).join(",")
+      );
+    }
+
+    if (priority) {
+      const priorities = priority.split(",");
+      query = query.in("priority", priorities);
+    }
+
+    // Ordenação
+    if (sort) {
+      const [field, direction] = sort.split("-");
+      query = query.order(field, { ascending: direction === "asc" });
+    } else {
+      query = query.order("createdAt", { ascending: false });
+    }
+
+    // Paginação
+    query = query.range(start, end);
+
+    const { data, error, count } = await query;
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const total = count || 0;
+
+    res.json({
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      nextPage: page * limit < total ? page + 1 : null,
+      previousPage: page > 1 ? page - 1 : null,
+      data,
+    });
+  } catch (err) {
+    console.error("Erro ao listar todas as OS:", err.message);
+    res.status(500).json({ error: "Erro interno ao listar OS" });
+  }
+});
+
+
+/*/ Listar todas as OS (somente PCP, ALMOXARIFADO e ADMIN) com paginação ANTIGO
 app.get("/os", authenticateToken, async (req, res) => {
   if (
     req.user.role !== "PCP" &&
@@ -294,27 +381,8 @@ app.get("/os", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Erro interno ao listar OS" });
   }
 });
-
-
 /*/
-teste listar os antigo
-Listar todas as OS (somente PCP)
-app.get("/os", authenticateToken, async (req, res) => {
-  if (
-    req.user.role !== "PCP" &&
-    req.user.role !== "ALMOXARIFADO" &&
-    req.user.role !== "ADMIN"
-  ) {
-    return res.status(403).json({ error: "Acesso negado" });
-  }
 
-  const { data, error } = await supabase.from("Ordens_Servico").select("*");
-
-  if (error) return res.status(500).json({ error: error.message });
-
-  res.json(data);
-});
-/*/
 
 //OS por setor
 app.get("/os/setor", authenticateToken, async (req, res) => {
