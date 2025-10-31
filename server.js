@@ -352,6 +352,32 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
         );
       }
 
+             if (setor === "USINAGEM") {
+        const setoresPermitidos = ["USINAGEM", "FRESA", "TORNO", "CNC"];
+        return (
+          setoresPermitidos.includes(os.currentSector?.sector?.toUpperCase?.()) ||
+          setoresPermitidos.includes(os.currentSector?.toUpperCase?.()) ||
+          (finalizada &&
+            Array.isArray(os.routing) &&
+            os.routing.some((r) =>
+              setoresPermitidos.includes(r.sector?.toUpperCase?.())
+            ))
+        );
+      }
+
+      if (setor === "SOLDA") {
+        const setoresPermitidos = ["SOLDA", "PINTURA", "COLARINHO"];
+        return (
+          setoresPermitidos.includes(os.currentSector?.sector?.toUpperCase?.()) ||
+          setoresPermitidos.includes(os.currentSector?.toUpperCase?.()) ||
+          (finalizada &&
+            Array.isArray(os.routing) &&
+            os.routing.some((r) =>
+              setoresPermitidos.includes(r.sector?.toUpperCase?.())
+            ))
+        );
+      }
+
       const setorAtual =
         os.currentSector?.sector?.toUpperCase?.() === setor ||
         os.currentSector?.toUpperCase?.() === setor;
