@@ -826,38 +826,6 @@ cron.schedule(
     timezone: "America/Sao_Paulo",
   }
 );
-
-
-/*/
-//Pausa todas as OS em produção às 17h
-cron.schedule("0 17 * * *", async () => {
-  console.log("Executando pausa automática de OS em produção...");
-
-  try {
-    //Buscar todas as OS que estão em produção
-    const { data: osEmProducao, error: erroBusca } = await supabase
-      .from("Ordens_Servico")
-      .select("*")
-      .eq("status", "Em produção");
-
-    if (erroBusca) throw new Error(erroBusca.message);
-
-    if (!osEmProducao || osEmProducao.length === 0) {
-      console.log("Nenhuma OS em produção no momento.");
-      return;
-    }
-
-    //Pausar todas
-    const { data: pausadas, error: erroPausa } = await supabase
-      .from("Ordens_Servico")
-      .update({ status: "Pausada" })
-      .eq("status", "Em produção")
-      .select("*");
-
-    if (erroPausa) throw new Error(erroPausa.message);
-
-    console.log(`${pausadas.length} OS pausadas automaticamente.`);
-
     //Inserir log para cada OS pausada
     const agora = dayjs().format("YYYY-MM-DD HH:mm:ss");
 
@@ -878,6 +846,6 @@ cron.schedule("0 17 * * *", async () => {
   } catch (err) {
     console.error("Erro no cron de pausa automática:", err.message);
   }
-}); /*/
+});
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
