@@ -412,73 +412,6 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
   }
 });
 
-/*/
-funciona mas ta errado
-Listar OS do setor correspondente ao usuário logado
-app.get("/os/setor", authenticateToken, async (req, res) => {
-  const setor = req.user.role;
-  
-  // Paginação
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
-  const start = (page - 1) * limit;
-  const end = start + limit - 1;
-  
-
-  try {
-    const { data, error } = await supabase.from("Ordens_Servico").select("*");
-    
-    if (error) return res.status(500).json({ error: error.message });
-
-    const filtradas = data.filter((os) => {
-      const finalizada = os.status?.toLowerCase() === "finalizado";
-      
-        // se o setor for MONTAGEM
-      if (setor?.toUpperCase() === "MONTAGEM") {
-        const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
-        return (
-          setoresPermitidos.includes(
-            os.currentSector?.sector?.toUpperCase?.()
-          ) ||
-          setoresPermitidos.includes(os.currentSector?.toUpperCase?.()) ||
-          (finalizada &&
-            Array.isArray(os.routing) &&
-            os.routing.some((r) =>
-              setoresPermitidos.includes(r.sector?.toUpperCase?.())
-            ))
-        );
-      }
-      
-      const setorAtual =
-        os.currentSector?.sector === setor || os.currentSector === setor;
-
-      // Verifica se o setor logado existe no roteiro da OS
-      const passouPorRoteiro =
-        Array.isArray(os.routing) && os.routing.some((r) => r.sector === setor);
-
-      // Mostra se está no setor ou se está finalizada mas passou pelo roteiro
-      return setorAtual || (finalizada && passouPorRoteiro);
-      
-    });
-    
-       // Paginação manual
-    const total = filtradas.length;
-    const paginadas = filtradas.slice(start, end + 1);
-
-    res.json(
-      page,
-      total,
-      totalPages: Math.ceil(total / limit),
-      data: paginadas,
-    });
-  } catch (err) {
-    console.error("Erro ao listar OS por setor:", err.message);
-    res.status(500).json({ error: "Erro interno ao listar OS" });
-  }
-});
-/*/
-
-
 // Buscar OS específica pelo orderNumber
 app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
   const orderNumber = req.params.orderNumber;
@@ -509,6 +442,29 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
     //se for MONTAGEM, pode ver também ELETRICA, MECANICA e TESTE
     if (setorUsuario === "MONTAGEM") {
       const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
+      const setorAtual =
+        os.currentSector?.sector?.toUpperCase?.() ||
+        os.currentSector?.toUpperCase?.();
+
+      if (setoresPermitidos.includes(setorAtual)) {
+        return res.json(os);
+      }
+    }
+//se for USINAGEM, pode ver também "FRESA", "TORNO", "CNC"
+    if (setorUsuario === "USINAGEM") {
+      const setoresPermitidos = ["USINAGEM", "FRESA", "TORNO", "CNC"];
+      const setorAtual =
+        os.currentSector?.sector?.toUpperCase?.() ||
+        os.currentSector?.toUpperCase?.();
+
+      if (setoresPermitidos.includes(setorAtual)) {
+        return res.json(os);
+      }
+    }
+    
+//se for "SOLDA", pode ver também "SOLDA", "PINTURA", "COLARINHO"
+    if (setorUsuario === "SOLDA") {
+      const setoresPermitidos = ["SOLDA", "PINTURA", "COLARINHO"];
       const setorAtual =
         os.currentSector?.sector?.toUpperCase?.() ||
         os.currentSector?.toUpperCase?.();
