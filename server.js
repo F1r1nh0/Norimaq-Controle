@@ -278,9 +278,7 @@ app.get("/os", authenticateToken, async (req, res) => {
   } = req.query;
 
   try {
-    let query = supabase
-      .from("Ordens_Servico")
-      .select("*", { count: "exact" });
+    let query = supabase.from("Ordens_Servico").select("*", { count: "exact" });
 
     // Filtro de busca
     if (search && search.trim() !== "") {
@@ -340,7 +338,6 @@ app.get("/os", authenticateToken, async (req, res) => {
   }
 });
 
-
 /*/ Listar todas as OS (somente PCP, ALMOXARIFADO e ADMIN) com paginação ANTIGO
 app.get("/os", authenticateToken, async (req, res) => {
   if (
@@ -383,7 +380,6 @@ app.get("/os", authenticateToken, async (req, res) => {
 });
 /*/
 
-
 //OS por setor
 app.get("/os/setor", authenticateToken, async (req, res) => {
   const setor = req.user.role?.toUpperCase();
@@ -410,7 +406,9 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
       if (setor === "MONTAGEM") {
         const setoresPermitidos = ["ELETRICA", "MECANICA", "TESTE", "MONTAGEM"];
         return (
-          setoresPermitidos.includes(os.currentSector?.sector?.toUpperCase?.()) ||
+          setoresPermitidos.includes(
+            os.currentSector?.sector?.toUpperCase?.()
+          ) ||
           setoresPermitidos.includes(os.currentSector?.toUpperCase?.()) ||
           (finalizada &&
             Array.isArray(os.routing) &&
@@ -420,10 +418,12 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
         );
       }
 
-             if (setor === "USINAGEM") {
+      if (setor === "USINAGEM") {
         const setoresPermitidos = ["USINAGEM", "FRESA", "TORNO", "CNC"];
         return (
-          setoresPermitidos.includes(os.currentSector?.sector?.toUpperCase?.()) ||
+          setoresPermitidos.includes(
+            os.currentSector?.sector?.toUpperCase?.()
+          ) ||
           setoresPermitidos.includes(os.currentSector?.toUpperCase?.()) ||
           (finalizada &&
             Array.isArray(os.routing) &&
@@ -436,7 +436,9 @@ app.get("/os/setor", authenticateToken, async (req, res) => {
       if (setor === "SOLDA") {
         const setoresPermitidos = ["SOLDA", "PINTURA", "COLARINHO"];
         return (
-          setoresPermitidos.includes(os.currentSector?.sector?.toUpperCase?.()) ||
+          setoresPermitidos.includes(
+            os.currentSector?.sector?.toUpperCase?.()
+          ) ||
           setoresPermitidos.includes(os.currentSector?.toUpperCase?.()) ||
           (finalizada &&
             Array.isArray(os.routing) &&
@@ -497,7 +499,7 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
     }
 
     // Se for PCP ou ALMOXARIFADO e ADMIN, pode ver tudo
-    if (["PCP", "ALMOXARIFADO" , "ADMIN"].includes(setorUsuario)) {
+    if (["PCP", "ALMOXARIFADO", "ADMIN"].includes(setorUsuario)) {
       return res.json(os);
     }
 
@@ -518,7 +520,7 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
         return res.json(os);
       }
     }
-//se for USINAGEM, pode ver também "FRESA", "TORNO", "CNC"
+    //se for USINAGEM, pode ver também "FRESA", "TORNO", "CNC"
     if (setorUsuario === "USINAGEM") {
       const setoresPermitidos = ["USINAGEM", "FRESA", "TORNO", "CNC"];
       const setorAtual =
@@ -529,8 +531,8 @@ app.get("/os/:orderNumber/ler", authenticateToken, async (req, res) => {
         return res.json(os);
       }
     }
-    
-//se for "SOLDA", pode ver também "SOLDA", "PINTURA", "COLARINHO"
+
+    //se for "SOLDA", pode ver também "SOLDA", "PINTURA", "COLARINHO"
     if (setorUsuario === "SOLDA") {
       const setoresPermitidos = ["SOLDA", "PINTURA", "COLARINHO"];
       const setorAtual =
@@ -741,8 +743,6 @@ app.get("/log/:orderNumber", authenticateToken, async (req, res) => {
   }
 });
 
-
-
 /*/
 teste logs antigo
 Todos os logs
@@ -865,6 +865,45 @@ cron.schedule(
 
       if (erroPausa) throw new Error(erroPausa.message);
 
+      pausadas.forEach(async (os) => {
+        let progressDetails = os.progressDetails;
+        let currentSectorIndex = os.routing.findIndex(
+          (r) =>
+            r.sector === os.currentSector?.sector &&
+            r.position === os.currentSector?.position
+        );
+        let pausedTimes = progressDetails?.[currentSectorIndex].pausedTimes;
+
+        if (!pausedTimes || (pausedTimes && pausedTimes.length === 0)) {
+          pausedTimes = [
+            {
+              startDate: new Date().getTime(),
+              finishDate: null,
+              duration: null,
+            },
+          ];
+        } else {
+          pausedTimes.push({
+            startDate: new Date().getTime(),
+            finishDate: null,
+            duration: null,
+          });
+        }
+
+        if (progressDetails && pausedTimes) {
+          progressDetails[currentSectorIndex].pausedTimes = pausedTimes;
+        }
+
+        const { error } = await supabase
+          .from("Ordens_Servico")
+          .update({ progressDetails: os.progressDetails })
+          .eq("orderNumber", os.orderNumber);
+
+        if (error) {
+          console.error(`Erro ao atualizar OS ${os.id}:`, error.message);
+        }
+      });
+
       console.log(`${pausadas.length} OS pausadas automaticamente.`);
 
       // Inserir log para cada OS pausada
@@ -894,26 +933,5 @@ cron.schedule(
     timezone: "America/Sao_Paulo",
   }
 );
-    //Inserir log para cada OS pausada
-    const agora = dayjs().format("YYYY-MM-DD HH:mm:ss");
-
-    const logs = pausadas.map((os) => ({
-      orderNumber: os.orderNumber,
-      sector: "Sistema",
-      description: `Produção pausada automaticamente às 17h`,
-      date: new Date().getTime(),
-    },  {timezone: "America/Sao_Paulo"} ));
-
-    const { error: erroLog } = await supabase.from("Log_OS").insert(logs);
-
-    if (erroLog) {
-      console.error("Erro ao registrar logs:", erroLog.message);
-    } else {
-      console.log("Logs de pausa registrados com sucesso.");
-    }
-  } catch (err) {
-    console.error("Erro no cron de pausa automática:", err.message);
-  }
-});
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
